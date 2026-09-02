@@ -1,0 +1,64 @@
+{
+  "evidence_label": "offline evaluation on a held-out synthetic temporal test set",
+  "causal_claim": false,
+  "split": {
+    "train_rows": 3500,
+    "validation_rows": 750,
+    "test_rows": 750,
+    "train_end": "2026-07-04T06:56:31.878376+00:00",
+    "validation_end": "2026-07-31T03:28:15.939188+00:00",
+    "test_end": "2026-08-27T00:00:00+00:00"
+  },
+  "test_recovery_rate": 0.2813333333333333,
+  "selection_metric": "lowest validation-period Brier score",
+  "validation_brier": {
+    "calibrated_logistic_regression": 0.19963566778692685,
+    "calibrated_hist_gradient_boosting": 0.20624627337529833
+  },
+  "selected_model": "calibrated_logistic_regression",
+  "models": {
+    "calibrated_logistic_regression": {
+      "pr_auc": 0.3475586355677866,
+      "roc_auc": 0.6143156099147975,
+      "brier_score": 0.19692218910673667,
+      "log_loss": 0.5751327173562135
+    },
+    "calibrated_hist_gradient_boosting": {
+      "pr_auc": 0.35059417292204437,
+      "roc_auc": 0.6233502448803735,
+      "brier_score": 0.19579543957721873,
+      "log_loss": 0.5795902300245545
+    }
+  },
+  "policy_estimates": {
+    "NO_CONTACT": {
+      "predicted_recovery_rate": 0.15131181510951083,
+      "predicted_recovered_amount": 518183.57107212173
+    },
+    "LINK_NOW": {
+      "predicted_recovery_rate": 0.3534426880280375,
+      "predicted_recovered_amount": 1192577.5576111434
+    },
+    "LINK_AFTER_2H": {
+      "predicted_recovery_rate": 0.3656936325908268,
+      "predicted_recovered_amount": 1265469.0580060093
+    },
+    "LINK_NEXT_MORNING": {
+      "predicted_recovery_rate": 0.3369430031641438,
+      "predicted_recovered_amount": 1163832.4735567234
+    },
+    "HUMAN_REVIEW": {
+      "predicted_recovery_rate": 0.353207837045245,
+      "predicted_recovered_amount": 1205825.19084789
+    },
+    "MODEL_RANKED": {
+      "predicted_recovery_rate": 0.41630997029131034,
+      "predicted_recovered_amount": 1421218.4480158736
+    }
+  },
+  "limitations": [
+    "Training and evaluation data are synthetic.",
+    "Policy values are model-based estimates, not observed counterfactual outcomes.",
+    "Real merchant uplift requires a randomized controlled experiment."
+  ]
+}

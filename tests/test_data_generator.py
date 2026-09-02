@@ -101,6 +101,16 @@ class TestSyntheticDataGenerator:
         exceeds = (dataset['recovered_amount_inr'] > dataset['amount_inr']).sum()
         assert exceeds == 0, \
             f"Found {exceeds} rows where recovered_amount_inr > amount_inr"
+
+    def test_recovered_amount_matches_original(self, dataset):
+        """A successful case recovers the full failed payment in this scope."""
+        recovered = dataset[dataset['recovered_within_72_hours'] == 1]
+        np.testing.assert_allclose(
+            recovered['recovered_amount_inr'],
+            recovered['amount_inr'],
+            rtol=0,
+            atol=0.01,
+        )
     
     def test_reproducibility(self):
         """Test that same seed produces identical results."""

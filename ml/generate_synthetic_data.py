@@ -166,10 +166,11 @@ def generate_synthetic_recovery_dataset(
     # Sample recovery outcomes from hidden probabilities
     recovered = np.random.binomial(1, recovery_probs)
     
-    # Recovered amount (0 if not recovered, otherwise 80-100% of original)
+    # This prototype models full recovery of a single failed payment.
+    # Partial-payment recovery is deliberately out of scope.
     recovered_amount = np.where(
         recovered == 1,
-        amounts * np.random.uniform(0.80, 1.00, num_records),
+        amounts,
         0
     )
     
@@ -354,7 +355,7 @@ def compute_hidden_recovery_probability(
         if action == 'NO_CONTACT':
             # Spontaneous recovery only, target 5-15%
             # Reduce significantly - baseline becomes ~0.02-0.07 range
-            base_prob[i] -= 0.14
+            base_prob[i] -= 0.16
         elif action == 'LINK_NOW':
             # Works moderately well in normal conditions
             if reason == 'temporary_network_issue':
