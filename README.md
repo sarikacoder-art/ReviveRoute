@@ -112,8 +112,28 @@ This creates `models/policy_demo.json` and a locally ignored audit JSONL file. A
 python -m pytest -q
 ```
 
-Current result: **57 passed**. In addition to data and ML validation, tests cover opt-out, payment-complete stopping, fatigue, retry exhaustion, expiry, escalation, degradation, India-local quiet hours, input validation, candidate scoring, batch evidence and audit tamper detection.
+The Milestone 1–3 suite covers opt-out, payment-complete stopping, fatigue, retry exhaustion, expiry, escalation, degradation, India-local quiet hours, input validation, candidate scoring, batch evidence and audit tamper detection.
 
 ## Next milestone
 
-Milestone 4 will add a FastAPI workflow service and SQLite state machine. Razorpay test-mode Payment Link execution, signed webhooks and the dashboard follow after the workflow core is tested.
+## Milestone 4 — Persistent workflow API
+
+`app/main.py` exposes the decision engine through FastAPI while `app/database.py` persists cases, all five candidate scores, state transitions and a global tamper-evident event chain in SQLite.
+
+Start the service:
+
+```bash
+python -m uvicorn app.main:app --reload
+```
+
+Open `http://127.0.0.1:8000/docs` for the interactive API. Available endpoints include health, case intake, case list/detail, controlled transitions, aggregate summary and audit verification.
+
+Event intake is idempotent. An identical replay returns the stored result without adding a second case; the same `event_id` with a changed payload returns HTTP 409. Terminal cases cannot be reopened, and invalid state transitions are rejected.
+
+SQLite files are local runtime state and ignored by Git. API rupee totals remain explicitly labelled model-based expectations, not observed revenue.
+
+Current result: **66 passed**. API tests cover validation, persistence across restarts, exact replay, conflicting replay, controlled transitions, terminal states, summary aggregation, audit creation and deliberate database-tampering detection. See `docs/api_contract.md` for the contract and state table.
+
+## Next milestone
+
+Milestone 5 will add signed Razorpay-style webhooks and a safely simulated executor before connecting Razorpay test-mode Payment Links. The dashboard follows once the full event loop is stable.
