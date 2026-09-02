@@ -1,0 +1,23 @@
+{
+  "evidence_label": "synthetic model-based policy demonstration; not causal uplift",
+  "batch_cases": 10,
+  "revenue_at_risk_inr": 50414.55,
+  "expected_net_recovery_inr": 19535.04,
+  "expected_net_recovery_rate": 0.3875,
+  "action_distribution": {
+    "HUMAN_REVIEW": 3,
+    "LINK_NEXT_MORNING": 6,
+    "NO_CONTACT": 1
+  },
+  "workflow_status_distribution": {
+    "ESCALATED": 3,
+    "SCHEDULED": 6,
+    "STOPPED": 1
+  },
+  "audit_entries": 10,
+  "audit_chain_valid": true,
+  "limitations": [
+    "Values are predictions on synthetic data, not money observed after deployment.",
+    "Real uplift must be measured with randomized assignment and Razorpay webhook outcomes."
+  ]
+}

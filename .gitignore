@@ -33,3 +33,6 @@ Thumbs.db
 *.log
 *.tmp
 temp/
+
+# Generated policy demonstration evidence
+data/policy_audit.jsonl

@@ -12,10 +12,10 @@ The training pipeline compares calibrated logistic regression and calibrated his
 
 - 5,000 synthetic records; no real Razorpay transactions or PII
 - Chronological 70/15/15 train, calibration/selection and test split
-- ROC-AUC: 0.676
-- PR-AUC: 0.438
-- Brier score: 0.196
-- Log loss: 0.573
+- ROC-AUC: 0.614
+- PR-AUC: 0.348
+- Brier score: 0.197
+- Log loss: 0.575
 
 Moderate metrics are expected and preferable to suspiciously perfect performance on a noisy recovery problem.
 
