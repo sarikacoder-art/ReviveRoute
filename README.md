@@ -70,11 +70,18 @@ The Milestone 1–2 tests cover reproducibility, realism, context-action relatio
 ```text
 ReviveRoute/
 ├── app/audit.py
+├── app/database.py
 ├── app/decision_engine.py
+├── app/executor.py
+├── app/main.py
 ├── app/run_policy_demo.py
+├── app/schemas.py
+├── app/webhooks.py
 ├── data/synthetic_recovery_history.csv
+├── docs/api_contract.md
 ├── docs/model_card.md
 ├── docs/policy_card.md
+├── docs/webhook_security.md
 ├── ml/features.py
 ├── ml/generate_synthetic_data.py
 ├── ml/train_action_model.py
@@ -83,7 +90,11 @@ ReviveRoute/
 ├── tests/test_data_generator.py
 ├── tests/test_model_pipeline.py
 ├── tests/test_decision_engine.py
+├── tests/test_api.py
+├── tests/test_webhooks.py
+├── .env.example
 ├── .gitignore
+├── pytest.ini
 ├── README.md
 └── requirements.txt
 ```
@@ -114,8 +125,6 @@ python -m pytest -q
 
 The Milestone 1–3 suite covers opt-out, payment-complete stopping, fatigue, retry exhaustion, expiry, escalation, degradation, India-local quiet hours, input validation, candidate scoring, batch evidence and audit tamper detection.
 
-## Next milestone
-
 ## Milestone 4 — Persistent workflow API
 
 `app/main.py` exposes the decision engine through FastAPI while `app/database.py` persists cases, all five candidate scores, state transitions and a global tamper-evident event chain in SQLite.
@@ -132,8 +141,25 @@ Event intake is idempotent. An identical replay returns the stored result withou
 
 SQLite files are local runtime state and ignored by Git. API rupee totals remain explicitly labelled model-based expectations, not observed revenue.
 
-Current result: **66 passed**. API tests cover validation, persistence across restarts, exact replay, conflicting replay, controlled transitions, terminal states, summary aggregation, audit creation and deliberate database-tampering detection. See `docs/api_contract.md` for the contract and state table.
+API tests cover validation, persistence across restarts, exact replay, conflicting replay, controlled transitions, terminal states, summary aggregation, audit creation and deliberate database-tampering detection. See `docs/api_contract.md` for the contract and state table.
+
+## Milestone 5 — Signed webhooks and safe execution
+
+`POST /webhooks/razorpay` verifies `X-Razorpay-Signature` against the exact raw body using HMAC-SHA256, then deduplicates with `X-Razorpay-Event-Id`. It supports `payment.failed` intake and `payment_link.paid` recovery attribution. Invalid signatures fail closed; exact retries are idempotent; conflicting reuse returns HTTP 409.
+
+`POST /api/v1/executor/run-due` runs only due link actions in `SIMULATED` mode. It never contacts a customer or payment API, and creates only non-routable `example.invalid` artifacts. A paid event must match its unique recovery reference and the full failed amount.
+
+Set a local webhook secret before starting the API:
+
+```powershell
+$env:RAZORPAY_WEBHOOK_SECRET="choose-a-long-random-local-secret"
+python -m uvicorn app.main:app --reload
+```
+
+Predicted expected recovery and signed demo/test observed recovery are reported separately. See `docs/webhook_security.md` for the security and evidence boundary.
+
+Current result: **77 passed**. Security tests cover exact raw-body verification, missing configuration, invalid signatures, event-ID replay and conflict, deterministic taxonomy, paise conversion, safe execution, human-review isolation, full recovery attribution, amount matching and audit continuity.
 
 ## Next milestone
 
-Milestone 5 will add signed Razorpay-style webhooks and a safely simulated executor before connecting Razorpay test-mode Payment Links. The dashboard follows once the full event loop is stable.
+Milestone 6 will add a polished operator dashboard and a one-click signed demo flow. Real Razorpay test-mode Payment Link creation follows behind an explicit configuration switch after the visual workflow is judge-ready.

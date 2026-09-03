@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import FastAPI, Header, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
-from app.database import CaseConflictError, CaseNotFoundError, InvalidTransitionError, RecoveryRepository
+from app.database import CaseConflictError, CaseNotFoundError, InvalidTransitionError, RecoveryAttributionError, RecoveryRepository, WebhookConflictError
 from app.decision_engine import DecisionEngine, RecoveryCase
+from app.executor import SimulatedExecutor
 from app.schemas import FailedPaymentRequest, TransitionRequest
+from app.webhooks import WebhookPayloadError, failed_payment_to_case, parse_webhook, payment_entity, payment_link_outcome, verify_webhook_signature
 
 DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "data" / "reviveroute.db"
 
 
-def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None) -> FastAPI:
+def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None) -> FastAPI:
     repository = RecoveryRepository(database_path)
 
     @asynccontextmanager
@@ -24,12 +29,14 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     application = FastAPI(
         title="ReviveRoute API",
-        version="0.4.0",
+        version="0.5.0",
         description="Bounded failed-payment recovery workflow prototype",
         lifespan=lifespan,
     )
     application.state.repository = repository
     application.state.engine = engine
+    application.state.webhook_secret = webhook_secret if webhook_secret is not None else os.getenv("RAZORPAY_WEBHOOK_SECRET")
+    application.state.executor = SimulatedExecutor(repository)
 
     def get_engine() -> DecisionEngine:
         if application.state.engine is None:
@@ -81,6 +88,67 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     @application.get("/api/v1/audit/verify")
     def verify_audit():
         return repository.verify_audit_chain()
+
+    @application.post("/api/v1/executor/run-due")
+    def run_due_actions(limit: int = Query(default=50, ge=1, le=200)):
+        executions = application.state.executor.run_due(limit=limit)
+        return {"execution_mode": "SIMULATED", "customer_contacted": False, "payment_api_called": False, "executions": executions}
+
+    @application.post("/webhooks/razorpay")
+    async def razorpay_webhook(
+        request: Request,
+        x_razorpay_signature: str | None = Header(default=None, alias="X-Razorpay-Signature"),
+        x_razorpay_event_id: str | None = Header(default=None, alias="X-Razorpay-Event-Id"),
+    ):
+        secret = application.state.webhook_secret
+        if not secret:
+            raise HTTPException(status_code=503, detail="webhook secret is not configured")
+        raw_body = await request.body()
+        if not verify_webhook_signature(raw_body, x_razorpay_signature, secret):
+            raise HTTPException(status_code=401, detail="invalid webhook signature")
+        if not x_razorpay_event_id:
+            raise HTTPException(status_code=400, detail="X-Razorpay-Event-Id header is required")
+        try:
+            webhook = parse_webhook(raw_body)
+            duplicate_response = repository.register_webhook(x_razorpay_event_id, webhook["event"], raw_body)
+            if duplicate_response is not None:
+                return duplicate_response
+            if webhook["event"] == "payment.failed":
+                payment = payment_entity(webhook)
+                customer_id = payment.get("customer_id") or (payment.get("notes") or {}).get("customer_id") or f"anonymous:{payment.get('id', 'unknown')}"
+                event_time = datetime.fromtimestamp(int(payment["created_at"]), tz=timezone.utc)
+                features = repository.customer_features(str(customer_id), event_time)
+                case = failed_payment_to_case(webhook, x_razorpay_event_id, features)
+                decision = get_engine().decide(case)
+                case_request = {
+                    "event_id": case.event_id, "source_payment_id": str(payment["id"]), "customer_id": case.customer_id,
+                    "timestamp_utc": case.timestamp_utc.isoformat(), "amount_inr": case.amount_inr,
+                    "payment_method": case.payment_method, "failure_reason": case.failure_reason,
+                    "customer_tenure_days": case.customer_tenure_days, "prior_successes": case.prior_successes,
+                    "prior_failures": case.prior_failures, "prior_recoveries": case.prior_recoveries,
+                    "contacts_last_7_days": case.contacts_last_7_days,
+                    "recent_method_failure_rate": case.recent_method_failure_rate,
+                    "degradation_flag": case.degradation_flag, "automated_attempts": 0,
+                    "opted_out": False, "already_recovered": False,
+                }
+                stored, _ = repository.create_case(case_request, decision)
+                response = {"status": "processed", "event": webhook["event"], "duplicate": False, "case": stored}
+            elif webhook["event"] == "payment_link.paid":
+                outcome = payment_link_outcome(webhook)
+                stored, duplicate = repository.record_recovery_outcome(webhook_delivery_id=x_razorpay_event_id, **outcome)
+                response = {"status": "processed", "event": webhook["event"], "duplicate": duplicate, "outcome": stored}
+            else:
+                response = {"status": "ignored", "event": webhook["event"], "duplicate": False}
+            repository.complete_webhook(x_razorpay_event_id, response)
+            return JSONResponse(response, status_code=200)
+        except WebhookConflictError:
+            raise HTTPException(status_code=409, detail="webhook event ID was reused with different content")
+        except CaseConflictError:
+            raise HTTPException(status_code=409, detail="recovery case event ID conflicts with existing data")
+        except RecoveryAttributionError as error:
+            raise HTTPException(status_code=409, detail=str(error))
+        except (WebhookPayloadError, KeyError, TypeError, ValueError) as error:
+            raise HTTPException(status_code=400, detail=str(error))
 
     return application
 
