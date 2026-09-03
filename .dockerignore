@@ -1,0 +1,10 @@
+.venv
+.git
+__pycache__
+.pytest_cache
+*.pyc
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+ReviveRoute-Milestone*.zip
