@@ -8,13 +8,14 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.database import CaseConflictError, CaseNotFoundError, InvalidTransitionError, RecoveryAttributionError, RecoveryRepository, WebhookConflictError
 from app.decision_engine import DecisionEngine, RecoveryCase
 from app.demo import DemoFlow
 from app.executor import SimulatedExecutor
+from app.intake import IntakeError, csv_template, parse_csv_batch, sample_batch
 from app.schemas import FailedPaymentRequest, TransitionRequest
 from app.webhooks import WebhookPayloadError, failed_payment_to_case, parse_webhook, payment_entity, payment_link_outcome, verify_webhook_signature
 
@@ -32,7 +33,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     application = FastAPI(
         title="ReviveRoute API",
-        version="0.6.0",
+        version="0.7.0",
         description="Bounded failed-payment recovery workflow prototype",
         lifespan=lifespan,
     )
@@ -71,6 +72,41 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
         except CaseConflictError:
             raise HTTPException(status_code=409, detail="event_id already exists with a different payload")
         return {"duplicate": duplicate, "case": stored}
+
+    def store_intake_case(payload: FailedPaymentRequest) -> tuple[dict, bool]:
+        request_payload = payload.model_dump(mode="json")
+        case = RecoveryCase(**payload.model_dump(), case_created_at_utc=payload.timestamp_utc)
+        return repository.create_case(request_payload, get_engine().decide(case))
+
+    @application.get("/api/v1/intake/template.csv")
+    def download_intake_template():
+        return Response(csv_template(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="reviveroute-import-template.csv"'})
+
+    @application.post("/api/v1/intake/csv")
+    async def import_intake_csv(request: Request):
+        try:
+            payloads, validation_errors = parse_csv_batch(await request.body())
+        except IntakeError as error:
+            raise HTTPException(status_code=422, detail=str(error))
+        created = 0
+        duplicates = 0
+        conflicts: list[dict[str, str]] = []
+        for payload in payloads:
+            try:
+                _, duplicate = store_intake_case(payload)
+                duplicates += int(duplicate)
+                created += int(not duplicate)
+            except CaseConflictError:
+                conflicts.append({"event_id": payload.event_id, "error": "event_id conflicts with existing data"})
+        return {"evidence_label": "merchant-supplied inputs; recovery values are model estimates until an outcome webhook is recorded", "rows_received": len(payloads) + len(validation_errors), "created": created, "duplicates": duplicates, "validation_errors": validation_errors, "conflicts": conflicts}
+
+    @application.post("/api/v1/intake/sample-batch")
+    def load_sample_batch(count: int = Query(default=25, ge=5, le=50)):
+        cases = []
+        for payload in sample_batch(count):
+            stored, _ = store_intake_case(payload)
+            cases.append(stored)
+        return {"evidence_label": "synthetic sample inputs; no customer contacted and no recovered revenue implied", "created": len(cases), "event_ids": [case["event_id"] for case in cases], "summary": repository.summary()}
 
     @application.get("/api/v1/recovery-cases")
     def list_recovery_cases(limit: int = Query(default=50, ge=1, le=200)):

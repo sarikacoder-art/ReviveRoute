@@ -17,6 +17,7 @@
       </a>
       <nav aria-label="Dashboard navigation">
         <a class="nav-link active" href="#overview"><span>⌂</span>Overview</a>
+        <a class="nav-link" href="#intake"><span>＋</span>Add payments</a>
         <a class="nav-link" href="#workflow"><span>↗</span>Recovery flow</a>
         <a class="nav-link" href="#cases"><span>≡</span>Case queue</a>
         <a class="nav-link" href="#audit"><span>✓</span>Audit integrity</a>
@@ -58,6 +59,16 @@
         </div>
       </section>
 
+      <section class="panel intake-panel" id="intake">
+        <div class="panel-heading"><div><p class="eyebrow">MERCHANT INTAKE</p><h2>Add failed payments to the recovery queue</h2></div><span class="live-chip">● POLICY APPLIED TO EVERY ROW</span></div>
+        <div class="sandbox-warning"><strong>Public demonstration workspace</strong><span>Use fictional data only. Data may reset when the free service restarts. Production intake uses authenticated, signed Razorpay webhooks and tenant isolation.</span></div>
+        <div class="intake-grid">
+          <article class="intake-card"><span class="intake-number">01</span><h3>Enter one failure</h3><p>Create a merchant-supplied case and see the chosen action, guardrails and expected value.</p><form id="manualIntakeForm" class="intake-form"><label>Amount at risk (₹)<input name="amount_inr" type="number" min="1" max="10000000" step="0.01" value="2499" required></label><label>Customer reference<input name="customer_id" maxlength="120" value="merchant_customer_001" required></label><label>Payment method<select name="payment_method" required><option value="upi">UPI</option><option value="debit_card">Debit card</option><option value="credit_card">Credit card</option><option value="net_banking">Net banking</option><option value="wallet">Wallet</option></select></label><label>Failure reason<select name="failure_reason" required><option value="temporary_network_issue">Temporary network issue</option><option value="insufficient_funds">Insufficient funds</option><option value="bank_limit_exceeded">Bank limit exceeded</option><option value="card_blocked">Card blocked</option><option value="risk_declined">Risk declined</option></select></label><button class="primary-button" type="submit" id="manualSubmitButton">Add and decide</button></form></article>
+          <article class="intake-card"><span class="intake-number">02</span><h3>Import a CSV batch</h3><p>Validate and score up to 100 failed payments at once. Invalid rows are reported with row numbers.</p><label class="file-drop" for="csvFile"><span>CSV</span><strong id="csvFileLabel">Choose a UTF-8 CSV file</strong><small>Maximum 512 KB · 100 data rows</small></label><input id="csvFile" type="file" accept=".csv,text/csv" hidden><div class="card-actions"><button class="primary-button" id="uploadCsvButton" type="button" disabled>Import batch</button><a class="secondary-button" href="/api/v1/intake/template.csv">Download template</a></div><div class="intake-result" id="csvResult" aria-live="polite"></div></article>
+          <article class="intake-card sample-card"><span class="intake-number">03</span><h3>Explore a sample batch</h3><p>Add 25 clearly labelled synthetic failures to see action mix, escalations, stopping rules and batch-level value.</p><div class="sample-visual"><strong>25</strong><span>varied synthetic<br>payment failures</span></div><button class="secondary-button" id="sampleBatchButton" type="button">Load sample batch</button><small>No customer contact or recovered revenue is implied.</small></article>
+        </div>
+      </section>
+
       <section class="metrics" aria-label="Recovery metrics">
         <article class="metric-card accent-blue"><p>Revenue at risk</p><h3 id="riskMetric">₹0</h3><small id="caseMetric">0 active cases</small></article>
         <article class="metric-card accent-violet"><p>Expected net recovery</p><h3 id="expectedMetric">₹0</h3><small><span id="expectedRate">0%</span> model-estimated</small></article>
@@ -94,7 +105,7 @@
         <div class="audit-icon">✓</div><div><p class="eyebrow">TAMPER-EVIDENT HISTORY</p><h2>Every decision leaves a verifiable trail.</h2><p>SHA-256 chaining covers the selected action, candidate scores, guardrails, execution, and outcome. Any stored modification identifies the first broken sequence.</p></div><button class="secondary-button" id="verifyAuditButton">Verify chain</button>
       </section>
 
-      <footer><span>ReviveRoute · Razorpay AI Buildathon</span><span>Evidence boundary: synthetic data and signed simulation—not production uplift.</span></footer>
+      <footer><span>ReviveRoute · Razorpay AI Buildathon · API v0.7.0</span><span>Evidence boundary: merchant inputs, synthetic data and signed simulation—not production uplift.</span></footer>
     </main>
   </div>
 

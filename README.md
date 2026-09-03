@@ -166,8 +166,14 @@ Open `http://127.0.0.1:8000/` after starting the service. The operator dashboard
 
 The **Run end-to-end demo** button creates a unique signed `payment.failed` fixture, verifies it, maps and diagnoses the failure, scores all actions, applies deterministic policy, executes only a non-routable simulated artifact, verifies a signed `payment_link.paid` fixture, attributes ₹1,800 to the exact recovery reference and closes the case as `RECOVERED`. It makes no customer contact and no Razorpay API call. Expected and observed-demo metrics remain visibly separated.
 
-Current result: **81 passed**. Dashboard tests cover local asset delivery, API version, complete signed-demo closure, external-call safety, audit validity, repeatability and isolation from unrelated due cases.
+## Milestone 8 — Merchant intake and batch exploration
 
-## Next milestone
+The dashboard now lets an external evaluator enter one fictional failed payment, import a CSV batch, download the canonical template or load 25 clearly labelled synthetic sample cases. Every accepted case follows the same model, guardrail, persistence and audit path as webhook-created cases.
 
-Milestone 7 will add a polished submission package, architecture diagram, scripted judge walkthrough and deployment instructions. Real Razorpay test-mode Payment Link creation remains behind an explicit configuration switch until the visual workflow is judge-ready.
+CSV imports are bounded to 512 KB and 100 rows. Required fields, enum values, amounts and timezone-aware timestamps are validated; failures include row numbers; exact event replays remain idempotent. The public hosted build is explicitly labelled a disposable sandbox and instructs users not to submit sensitive data. Production use requires authentication, tenant isolation, rate limiting and durable storage; signed Razorpay webhooks remain the production-shaped entry path.
+
+Current result: **88 passed**. Intake tests cover the downloadable template, valid and invalid rows, defaults, idempotent replay, byte and row limits, sample-batch bounds, evidence labels and dashboard controls. See `docs/merchant_intake.md`.
+
+## Deployment boundary
+
+Real Razorpay test-mode Payment Link creation remains behind an explicit configuration switch. The public demo never contacts a customer or payment API.

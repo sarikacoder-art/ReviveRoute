@@ -8,7 +8,7 @@ The model estimates action-specific recovery probability from payment, failure a
 
 Those are example directions. Combining checkout abandonment, subscriptions, receivables, voice and mandates in one solo-week prototype would produce shallow workflows. ReviveRoute implements one mandatory recovery loop deeply and can later add new event adapters without weakening its core controls.
 
-## Is the â‚¹1,800 real recovered money?
+## Is the ₹1,800 real recovered money?
 
 No. It is a signed local demonstration outcome and is labelled as such. The system keeps it separate from model-based expected recovery. Production uplift would require real outcomes and randomized experimentation.
 
@@ -35,3 +35,4 @@ The local database itself is not immutable, but changing or reordering an event 
 ## What would you build next?
 
 Razorpay test-mode Payment Link creation behind an explicit configuration switch, consent-aware messaging, randomized action assignment, outcome monitoring, production secret management and append-only audit storage.
+

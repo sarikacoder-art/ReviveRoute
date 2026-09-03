@@ -31,7 +31,7 @@ flowchart TD
 
 For each allowed action:
 
-`expected net value = predicted recovery probability Ã— amount at risk âˆ’ action cost âˆ’ fatigue penalty`
+`expected net value = predicted recovery probability × amount at risk − action cost − fatigue penalty`
 
 The model proposes five probabilities. Policy rules then remove unsafe actions, override sensitive cases, delay contact during quiet hours, or stop the workflow. This separation keeps prediction flexible and safety deterministic.
 
@@ -42,3 +42,4 @@ The model proposes five probabilities. Policy rules then remove unsafe actions, 
 3. Terminal workflow states cannot be reopened through invalid transitions.
 4. Outcome attribution requires the exact execution reference and full amount.
 5. The audit verifier detects modification or reordering of stored workflow events.
+

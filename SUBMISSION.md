@@ -1,16 +1,16 @@
 # ReviveRoute
 
-**Track:** AI Revenue Recovery
-**Build:** Solo
+**Track:** AI Revenue Recovery  
+**Build:** Solo  
 **Scope:** One-time failed Razorpay payment recovery
 
 ## One-line pitch
 
-ReviveRoute detects a failed payment, diagnoses why it failed, scores the next-best recovery action, enforces deterministic safety rules, executes a bounded workflow and attributes the signed recovery outcomeâ€”with measured money and a tamper-evident audit trail.
+ReviveRoute detects a failed payment, diagnoses why it failed, scores the next-best recovery action, enforces deterministic safety rules, executes a bounded workflow and attributes the signed recovery outcome—with measured money and a tamper-evident audit trail.
 
 ## Problem
 
-Revenue does not disappear in one clean step. A failed payment may be caused by insufficient funds, a network issue, a blocked card, a bank limit or a risk decline. Treating every failure as â€œretry nowâ€ can waste attempts, increase contact fatigue or automate a sensitive case.
+Revenue does not disappear in one clean step. A failed payment may be caused by insufficient funds, a network issue, a blocked card, a bank limit or a risk decline. Treating every failure as “retry now” can waste attempts, increase contact fatigue or automate a sensitive case.
 
 ## Solution
 
@@ -26,6 +26,7 @@ ReviveRoute combines:
 - signed outcome attribution and separately labelled metrics;
 - a persistent SHA-256 audit chain and verifier;
 - a judge-facing dashboard with a one-click end-to-end demo.
+- manual and bounded CSV merchant intake, a downloadable template and a synthetic sample-batch explorer.
 
 ## Why it is differentiated
 
@@ -39,15 +40,15 @@ Start the service and open the dashboard:
 python -m uvicorn app.main:app --reload
 ```
 
-Visit `http://127.0.0.1:8000/` and click **Run end-to-end demo**. A unique signed â‚¹1,800 failed-payment case moves through:
+Visit `http://127.0.0.1:8000/` and click **Run end-to-end demo**. A unique signed ₹1,800 failed-payment case moves through:
 
-`DETECTED â†’ DIAGNOSED â†’ DECIDED â†’ EXECUTED â†’ RECOVERED`
+`DETECTED → DIAGNOSED → DECIDED → EXECUTED → RECOVERED`
 
 The demonstration contacts no customer and calls no payment API.
 
 ## Validation
 
-- 81 automated tests cover data, model, policy, persistence, webhooks, attribution, dashboard and audit integrity.
+- 88 automated tests cover data, model, policy, persistence, webhooks, attribution, merchant intake, dashboard and audit integrity.
 - Invalid signatures fail closed.
 - Exact webhook retries are idempotent; conflicting replays are rejected.
 - Paid outcomes require an existing recovery reference and matching full amount.
@@ -55,7 +56,7 @@ The demonstration contacts no customer and calls no payment API.
 
 ## Evidence boundary
 
-The dataset is synthetic. Predictions are model-based and non-causal. The â‚¹1,800 demo outcome is signed local simulationâ€”not production revenue. Real uplift requires randomized assignment and real Razorpay outcomes.
+The dataset is synthetic. Predictions are model-based and non-causal. The ₹1,800 demo outcome is signed local simulation—not production revenue. Real uplift requires randomized assignment and real Razorpay outcomes.
 
 ## Technology
 
