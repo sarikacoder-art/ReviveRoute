@@ -158,8 +158,16 @@ python -m uvicorn app.main:app --reload
 
 Predicted expected recovery and signed demo/test observed recovery are reported separately. See `docs/webhook_security.md` for the security and evidence boundary.
 
-Current result: **77 passed**. Security tests cover exact raw-body verification, missing configuration, invalid signatures, event-ID replay and conflict, deterministic taxonomy, paise conversion, safe execution, human-review isolation, full recovery attribution, amount matching and audit continuity.
+Security tests cover exact raw-body verification, missing configuration, invalid signatures, event-ID replay and conflict, deterministic taxonomy, paise conversion, safe execution, human-review isolation, full recovery attribution, amount matching and audit continuity.
+
+## Milestone 6 — Judge dashboard and one-click proof
+
+Open `http://127.0.0.1:8000/` after starting the service. The operator dashboard displays revenue at risk, model-based expected recovery, signed simulated/test outcomes, action and workflow distributions, searchable case details, all candidate scores, guardrail reasons and audit verification.
+
+The **Run end-to-end demo** button creates a unique signed `payment.failed` fixture, verifies it, maps and diagnoses the failure, scores all actions, applies deterministic policy, executes only a non-routable simulated artifact, verifies a signed `payment_link.paid` fixture, attributes ₹1,800 to the exact recovery reference and closes the case as `RECOVERED`. It makes no customer contact and no Razorpay API call. Expected and observed-demo metrics remain visibly separated.
+
+Current result: **81 passed**. Dashboard tests cover local asset delivery, API version, complete signed-demo closure, external-call safety, audit validity, repeatability and isolation from unrelated due cases.
 
 ## Next milestone
 
-Milestone 6 will add a polished operator dashboard and a one-click signed demo flow. Real Razorpay test-mode Payment Link creation follows behind an explicit configuration switch after the visual workflow is judge-ready.
+Milestone 7 will add a polished submission package, architecture diagram, scripted judge walkthrough and deployment instructions. Real Razorpay test-mode Payment Link creation remains behind an explicit configuration switch until the visual workflow is judge-ready.

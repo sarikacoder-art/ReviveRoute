@@ -8,15 +8,18 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.database import CaseConflictError, CaseNotFoundError, InvalidTransitionError, RecoveryAttributionError, RecoveryRepository, WebhookConflictError
 from app.decision_engine import DecisionEngine, RecoveryCase
+from app.demo import DemoFlow
 from app.executor import SimulatedExecutor
 from app.schemas import FailedPaymentRequest, TransitionRequest
 from app.webhooks import WebhookPayloadError, failed_payment_to_case, parse_webhook, payment_entity, payment_link_outcome, verify_webhook_signature
 
 DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "data" / "reviveroute.db"
+STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 
 def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None) -> FastAPI:
@@ -29,7 +32,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     application = FastAPI(
         title="ReviveRoute API",
-        version="0.5.0",
+        version="0.6.0",
         description="Bounded failed-payment recovery workflow prototype",
         lifespan=lifespan,
     )
@@ -46,6 +49,14 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     @application.get("/health")
     def health() -> dict:
         return {"status": "ok", "service": "ReviveRoute", "version": application.version}
+
+    @application.get("/", include_in_schema=False)
+    def dashboard():
+        return FileResponse(STATIC_DIR / "dashboard.html")
+
+    @application.get("/dashboard", include_in_schema=False)
+    def dashboard_alias():
+        return FileResponse(STATIC_DIR / "dashboard.html")
 
     @application.post("/api/v1/recovery-cases", status_code=status.HTTP_201_CREATED)
     def create_recovery_case(payload: FailedPaymentRequest):
@@ -93,6 +104,13 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     def run_due_actions(limit: int = Query(default=50, ge=1, le=200)):
         executions = application.state.executor.run_due(limit=limit)
         return {"execution_mode": "SIMULATED", "customer_contacted": False, "payment_api_called": False, "executions": executions}
+
+    @application.post("/api/v1/demo/run")
+    def run_complete_demo():
+        try:
+            return DemoFlow(repository, get_engine(), application.state.executor).run()
+        except RuntimeError as error:
+            raise HTTPException(status_code=500, detail=str(error))
 
     @application.post("/webhooks/razorpay")
     async def razorpay_webhook(
@@ -150,6 +168,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
         except (WebhookPayloadError, KeyError, TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error))
 
+    application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return application
 
 

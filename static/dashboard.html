@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ReviveRoute bounded payment recovery operations dashboard">
+  <title>ReviveRoute · Revenue Recovery Command Center</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#overview" aria-label="ReviveRoute home">
+        <span class="brand-mark" aria-hidden="true">R</span>
+        <span><strong>ReviveRoute</strong><small>Recovery intelligence</small></span>
+      </a>
+      <nav aria-label="Dashboard navigation">
+        <a class="nav-link active" href="#overview"><span>⌂</span>Overview</a>
+        <a class="nav-link" href="#workflow"><span>↗</span>Recovery flow</a>
+        <a class="nav-link" href="#cases"><span>≡</span>Case queue</a>
+        <a class="nav-link" href="#audit"><span>✓</span>Audit integrity</a>
+      </nav>
+      <div class="sidebar-note">
+        <span class="status-dot"></span>
+        <div><strong>Safe demo mode</strong><small>No customer contact<br>No payment API calls</small></div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">AI REVENUE RECOVERY · OPERATIONS</p>
+          <h1>Command center</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="evidence-pill"><span></span>Synthetic + signed simulation</span>
+          <button id="refreshButton" class="icon-button" title="Refresh dashboard" aria-label="Refresh dashboard">↻</button>
+        </div>
+      </header>
+
+      <section class="hero" id="overview">
+        <div class="hero-copy">
+          <span class="kicker">BOUNDED AUTONOMY</span>
+          <h2>Recover the money.<br><em>Respect the customer.</em></h2>
+          <p>ReviveRoute detects failed payments, explains the cause, chooses the highest-value safe intervention, and closes the loop with stopping rules and a verifiable audit trail.</p>
+          <div class="hero-actions">
+            <button class="primary-button" id="runDemoButton"><span>▶</span> Run end-to-end demo</button>
+            <a class="secondary-button" href="/docs" target="_blank" rel="noopener">Explore API ↗</a>
+          </div>
+        </div>
+        <div class="hero-signal" aria-label="System safeguards">
+          <div class="signal-orbit orbit-one"></div><div class="signal-orbit orbit-two"></div>
+          <div class="signal-core"><span>5</span><small>recovery<br>stages</small></div>
+          <span class="signal-label label-one">Fatigue bound</span>
+          <span class="signal-label label-two">Quiet hours</span>
+          <span class="signal-label label-three">Risk escalation</span>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="Recovery metrics">
+        <article class="metric-card accent-blue"><p>Revenue at risk</p><h3 id="riskMetric">₹0</h3><small id="caseMetric">0 active cases</small></article>
+        <article class="metric-card accent-violet"><p>Expected net recovery</p><h3 id="expectedMetric">₹0</h3><small><span id="expectedRate">0%</span> model-estimated</small></article>
+        <article class="metric-card accent-green"><p>Observed test recovery</p><h3 id="observedMetric">₹0</h3><small id="observedCases">0 signed demo outcomes</small></article>
+        <article class="metric-card accent-amber"><p>Audit integrity</p><h3 id="auditMetric">Checking…</h3><small id="auditEntries">0 events verified</small></article>
+      </section>
+
+      <section class="panel workflow-panel" id="workflow">
+        <div class="panel-heading"><div><p class="eyebrow">THE CLOSED LOOP</p><h2>From signal to recovered revenue</h2></div><span class="live-chip">● LIVE POLICY</span></div>
+        <div class="workflow-track">
+          <div class="workflow-step"><span>01</span><div class="step-icon">!</div><strong>Detect</strong><small>Payment failure</small></div>
+          <div class="track-line"></div>
+          <div class="workflow-step"><span>02</span><div class="step-icon">⌁</div><strong>Diagnose</strong><small>Failure taxonomy</small></div>
+          <div class="track-line"></div>
+          <div class="workflow-step"><span>03</span><div class="step-icon">⌘</div><strong>Decide</strong><small>Expected net value</small></div>
+          <div class="track-line"></div>
+          <div class="workflow-step"><span>04</span><div class="step-icon">↗</div><strong>Execute</strong><small>Bounded action</small></div>
+          <div class="track-line"></div>
+          <div class="workflow-step"><span>05</span><div class="step-icon">✓</div><strong>Observe</strong><small>Attributed outcome</small></div>
+        </div>
+      </section>
+
+      <section class="insights-grid">
+        <article class="panel chart-panel"><div class="panel-heading compact"><div><p class="eyebrow">DECISION MIX</p><h2>Recommended actions</h2></div><span class="panel-tag">Current cases</span></div><div id="actionChart" class="bar-chart empty-state">Run the demo to populate decisions.</div></article>
+        <article class="panel chart-panel"><div class="panel-heading compact"><div><p class="eyebrow">WORKFLOW HEALTH</p><h2>Case status</h2></div><span class="panel-tag">Real-time</span></div><div id="statusChart" class="donut-layout"><div class="donut" id="statusDonut"><div><strong>0</strong><small>cases</small></div></div><div id="statusLegend" class="legend"></div></div></article>
+      </section>
+
+      <section class="panel cases-panel" id="cases">
+        <div class="panel-heading"><div><p class="eyebrow">RECOVERY QUEUE</p><h2>Decision-level transparency</h2></div><div class="filters"><label class="search"><span>⌕</span><input id="caseSearch" type="search" placeholder="Search case or customer" aria-label="Search recovery cases"></label><select id="statusFilter" aria-label="Filter by status"><option value="">All statuses</option></select></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Case</th><th>Failure amount</th><th>Action</th><th>Status</th><th>Expected value</th><th>Updated</th><th></th></tr></thead><tbody id="casesBody"><tr><td colspan="7" class="empty-cell">No recovery cases yet. Run the end-to-end demo.</td></tr></tbody></table></div>
+      </section>
+
+      <section class="panel audit-panel" id="audit">
+        <div class="audit-icon">✓</div><div><p class="eyebrow">TAMPER-EVIDENT HISTORY</p><h2>Every decision leaves a verifiable trail.</h2><p>SHA-256 chaining covers the selected action, candidate scores, guardrails, execution, and outcome. Any stored modification identifies the first broken sequence.</p></div><button class="secondary-button" id="verifyAuditButton">Verify chain</button>
+      </section>
+
+      <footer><span>ReviveRoute · Razorpay AI Buildathon</span><span>Evidence boundary: synthetic data and signed simulation—not production uplift.</span></footer>
+    </main>
+  </div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="case-drawer" id="caseDrawer" aria-hidden="true" aria-label="Recovery case details"><button class="drawer-close" id="drawerClose" aria-label="Close case details">×</button><div id="drawerContent"></div></aside>
+
+  <div class="modal-backdrop" id="demoModal" hidden>
+    <section class="demo-modal" role="dialog" aria-modal="true" aria-labelledby="demoTitle">
+      <button class="drawer-close" id="demoClose" aria-label="Close demo">×</button>
+      <span class="kicker">SIGNED SIMULATION</span><h2 id="demoTitle">Watch ReviveRoute close the loop</h2><p class="modal-intro">The actual policy and database run below. No real customer or payment service is contacted.</p>
+      <div id="demoTimeline" class="demo-timeline"></div><div id="demoResult" class="demo-result"></div>
+    </section>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/dashboard.js" defer></script>
+</body>
+</html>

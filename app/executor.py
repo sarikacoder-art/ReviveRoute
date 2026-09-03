@@ -21,6 +21,6 @@ class SimulatedExecutor:
         digest = hashlib.sha256(event_id.encode("utf-8")).hexdigest()[:20]
         return f"rr_demo_{digest}"
 
-    def run_due(self, now: datetime | None = None, limit: int = 50) -> list[dict]:
+    def run_due(self, now: datetime | None = None, limit: int = 50, event_id: str | None = None) -> list[dict]:
         now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-        return self.repository.execute_due_simulated(now, limit, self.reference_for)
+        return self.repository.execute_due_simulated(now, limit, self.reference_for, event_id=event_id)

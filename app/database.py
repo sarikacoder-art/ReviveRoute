@@ -350,16 +350,19 @@ class RecoveryRepository:
             "degradation_flag": 0,
         }
 
-    def execute_due_simulated(self, now: datetime, limit: int, reference_factory) -> list[dict[str, Any]]:
+    def execute_due_simulated(
+        self, now: datetime, limit: int, reference_factory, event_id: str | None = None
+    ) -> list[dict[str, Any]]:
         results = []
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             rows = connection.execute(
                 """SELECT event_id, selected_action, workflow_status FROM recovery_cases
                    WHERE workflow_status = 'SCHEDULED' AND execute_after_utc IS NOT NULL AND execute_after_utc <= ?
+                     AND (? IS NULL OR event_id = ?)
                      AND selected_action IN ('LINK_NOW', 'LINK_AFTER_2H', 'LINK_NEXT_MORNING')
                    ORDER BY execute_after_utc LIMIT ?""",
-                (now.isoformat(), limit),
+                (now.isoformat(), event_id, event_id, limit),
             ).fetchall()
             for row in rows:
                 event_id, action = row["event_id"], row["selected_action"]
