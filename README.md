@@ -139,7 +139,7 @@ Open `http://127.0.0.1:8000/docs` for the interactive API. Available endpoints i
 
 Event intake is idempotent. An identical replay returns the stored result without adding a second case; the same `event_id` with a changed payload returns HTTP 409. Terminal cases cannot be reopened, and invalid state transitions are rejected.
 
-SQLite files are local runtime state and ignored by Git. API rupee totals remain explicitly labelled model-based expectations, not observed revenue.
+SQLite files are local runtime state and ignored by Git. Hosted deployments can set `DATABASE_URL` to a managed PostgreSQL URL so cases, scheduled actions, outcomes and the audit chain survive service restarts. API rupee totals remain explicitly labelled model-based expectations, not observed revenue.
 
 API tests cover validation, persistence across restarts, exact replay, conflicting replay, controlled transitions, terminal states, summary aggregation, audit creation and deliberate database-tampering detection. See `docs/api_contract.md` for the contract and state table.
 
@@ -203,3 +203,7 @@ Current verification: **103 passing tests**. See `docs/judge_readiness.md`.
 Set `RAZORPAY_TEST_MODE_ENABLED=true` together with private `rzp_test_` credentials to activate the hybrid executor. Only cases originating from a verified Razorpay webhook can call the Payment Links API; manual, CSV and synthetic cases remain simulated. Notifications and reminders are disabled, live key IDs are rejected, provider failures are audited, and `payment_link.paid` closes the exact attributed case. See `docs/razorpay_test_mode.md`.
 
 Without this explicit switch and valid test credentials, ReviveRoute remains fully simulated.
+
+## Milestone 14 — Durable hosted state
+
+ReviveRoute now selects managed PostgreSQL whenever `DATABASE_URL` is configured, while preserving SQLite for local development and tests. The health response exposes only the backend type (`POSTGRESQL` or `SQLITE`), never the connection string. See `docs/durable_postgres.md` for the Render setup and restart-survival check.

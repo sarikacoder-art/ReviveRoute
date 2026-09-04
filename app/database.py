@@ -1,4 +1,9 @@
-"""SQLite persistence and workflow invariants for ReviveRoute."""
+"""Durable persistence and workflow invariants for ReviveRoute.
+
+SQLite remains the zero-configuration local/test backend.  A PostgreSQL URL in
+``DATABASE_URL`` enables durable hosted storage without changing repository
+behaviour.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,13 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
+
+try:  # Imported only by hosted PostgreSQL deployments.
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:  # pragma: no cover - SQLite development needs no driver
+    psycopg = None
+    dict_row = None
 
 from app.audit import GENESIS_HASH
 from app.decision_engine import RecoveryDecision
@@ -55,9 +67,48 @@ def payload_fingerprint(payload: dict[str, Any]) -> str:
 class RecoveryRepository:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = str(database_path)
+        self.is_postgres = self.database_path.startswith(("postgresql://", "postgres://"))
+
+    @staticmethod
+    def _postgres_sql(sql: str) -> str:
+        """Translate the small SQLite-compatible query subset used here."""
+        translated = sql.replace("?", "%s")
+        if "INSERT OR IGNORE INTO" in translated:
+            translated = translated.replace("INSERT OR IGNORE INTO", "INSERT INTO", 1)
+            translated = f"{translated.rstrip()} ON CONFLICT DO NOTHING"
+        return translated
+
+    class _PostgresConnection:
+        def __init__(self, connection: Any) -> None:
+            self.raw = connection
+            self.is_postgres = True
+
+        def execute(self, sql: str, params: tuple[Any, ...] = ()) -> Any:
+            if sql.strip().upper() == "BEGIN IMMEDIATE":
+                return self.raw.execute("BEGIN")
+            return self.raw.execute(RecoveryRepository._postgres_sql(sql), params)
+
+        def commit(self) -> None:
+            self.raw.commit()
+
+        def rollback(self) -> None:
+            self.raw.rollback()
 
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
+    def connect(self) -> Iterator[Any]:
+        if self.is_postgres:
+            if psycopg is None:
+                raise RuntimeError("DATABASE_URL is PostgreSQL but psycopg is not installed")
+            url = self.database_path.replace("postgres://", "postgresql://", 1)
+            # Repository write paths explicitly open transactions where atomicity
+            # spans multiple statements. Autocommit keeps read-only and one-write
+            # helpers from leaving idle hosted transactions behind.
+            raw = psycopg.connect(url, row_factory=dict_row, connect_timeout=10, autocommit=True)
+            try:
+                yield self._PostgresConnection(raw)
+            finally:
+                raw.close()
+            return
         connection = sqlite3.connect(self.database_path, timeout=10)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -67,6 +118,9 @@ class RecoveryRepository:
             connection.close()
 
     def initialize(self) -> None:
+        if self.is_postgres:
+            self._initialize_postgres()
+            return
         Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.executescript(
@@ -371,6 +425,73 @@ class RecoveryRepository:
                 claimed.append(dict(row))
             connection.commit()
         return claimed
+
+    def _initialize_postgres(self) -> None:
+        statements = (
+            """CREATE TABLE IF NOT EXISTS recovery_cases (
+                event_id TEXT PRIMARY KEY, source_payment_id TEXT, customer_id TEXT NOT NULL,
+                payload_fingerprint TEXT NOT NULL, request_json TEXT NOT NULL,
+                amount_inr DOUBLE PRECISION NOT NULL CHECK (amount_inr > 0),
+                selected_action TEXT NOT NULL, workflow_status TEXT NOT NULL,
+                execute_after_utc TEXT, reason_codes_json TEXT NOT NULL, explanation TEXT NOT NULL,
+                selected_probability DOUBLE PRECISION NOT NULL CHECK (selected_probability BETWEEN 0 AND 1),
+                expected_net_value DOUBLE PRECISION NOT NULL,
+                created_at_utc TEXT NOT NULL, updated_at_utc TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS candidate_scores (
+                event_id TEXT NOT NULL REFERENCES recovery_cases(event_id) ON DELETE CASCADE,
+                action TEXT NOT NULL, recovery_probability DOUBLE PRECISION NOT NULL,
+                expected_recovered_amount DOUBLE PRECISION NOT NULL, action_cost DOUBLE PRECISION NOT NULL,
+                fatigue_penalty DOUBLE PRECISION NOT NULL, expected_net_value DOUBLE PRECISION NOT NULL,
+                allowed INTEGER NOT NULL CHECK (allowed IN (0, 1)), blocked_reason TEXT,
+                PRIMARY KEY (event_id, action)
+            )""",
+            """CREATE TABLE IF NOT EXISTS workflow_events (
+                sequence BIGSERIAL PRIMARY KEY, recorded_at_utc TEXT NOT NULL,
+                event_id TEXT NOT NULL REFERENCES recovery_cases(event_id) ON DELETE CASCADE,
+                event_type TEXT NOT NULL, from_status TEXT, to_status TEXT NOT NULL,
+                payload_json TEXT NOT NULL, previous_hash TEXT NOT NULL, entry_hash TEXT NOT NULL UNIQUE
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_cases_status ON recovery_cases(workflow_status)",
+            "CREATE INDEX IF NOT EXISTS idx_events_case ON workflow_events(event_id, sequence)",
+            """CREATE TABLE IF NOT EXISTS webhook_deliveries (
+                delivery_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, payload_hash TEXT NOT NULL,
+                processing_status TEXT NOT NULL, response_json TEXT, received_at_utc TEXT NOT NULL,
+                processed_at_utc TEXT
+            )""",
+            """CREATE TABLE IF NOT EXISTS executions (
+                reference_id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL UNIQUE REFERENCES recovery_cases(event_id) ON DELETE CASCADE,
+                action TEXT NOT NULL, execution_mode TEXT NOT NULL
+                    CHECK (execution_mode IN ('SIMULATED', 'RAZORPAY_TEST')),
+                artifact_url TEXT NOT NULL, created_at_utc TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS recovery_outcomes (
+                event_id TEXT PRIMARY KEY REFERENCES recovery_cases(event_id) ON DELETE CASCADE,
+                webhook_delivery_id TEXT NOT NULL UNIQUE,
+                reference_id TEXT NOT NULL UNIQUE REFERENCES executions(reference_id),
+                payment_id TEXT NOT NULL UNIQUE,
+                recovered_amount_inr DOUBLE PRECISION NOT NULL CHECK (recovered_amount_inr > 0),
+                evidence_mode TEXT NOT NULL, recovered_at_utc TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS payment_promises (
+                promise_id TEXT PRIMARY KEY, customer_id TEXT NOT NULL, display_name TEXT NOT NULL,
+                amount_inr DOUBLE PRECISION NOT NULL CHECK (amount_inr > 0),
+                promised_at_utc TEXT NOT NULL, promised_due_utc TEXT NOT NULL,
+                paid_at_utc TEXT, source TEXT NOT NULL, created_at_utc TEXT NOT NULL
+            )""",
+            """CREATE TABLE IF NOT EXISTS razorpay_test_executions (
+                reference_id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL UNIQUE REFERENCES recovery_cases(event_id) ON DELETE CASCADE,
+                action TEXT NOT NULL, payment_link_id TEXT NOT NULL UNIQUE,
+                artifact_url TEXT NOT NULL, created_at_utc TEXT NOT NULL
+            )""",
+            "ALTER TABLE recovery_cases ADD COLUMN IF NOT EXISTS source_payment_id TEXT",
+        )
+        with self.connect() as connection:
+            for statement in statements:
+                connection.execute(statement)
+            connection.commit()
 
     def complete_razorpay_test_execution(self, event_id: str, action: str, result: dict[str, Any], now: datetime) -> dict[str, Any]:
         with self.connect() as connection:

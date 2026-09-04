@@ -28,7 +28,8 @@ DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "data" / "revivero
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 
-def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None, agent_enabled: bool | None = None, agent_interval_seconds: float = 10.0, auto_seed: bool = False, razorpay_test_enabled: bool | None = None) -> FastAPI:
+def create_app(database_path: str | Path | None = None, engine: DecisionEngine | None = None, webhook_secret: str | None = None, agent_enabled: bool | None = None, agent_interval_seconds: float = 10.0, auto_seed: bool = False, razorpay_test_enabled: bool | None = None) -> FastAPI:
+    database_path = database_path or os.getenv("DATABASE_URL") or DEFAULT_DATABASE_PATH
     repository = RecoveryRepository(database_path)
     simulated_executor = SimulatedExecutor(repository)
     test_enabled = razorpay_test_enabled if razorpay_test_enabled is not None else os.getenv("RAZORPAY_TEST_MODE_ENABLED", "false").lower() == "true"
@@ -50,7 +51,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     application = FastAPI(
         title="ReviveRoute API",
-        version="1.2.0",
+        version="1.3.0",
         description="Bounded failed-payment recovery workflow prototype",
         lifespan=lifespan,
     )
@@ -69,7 +70,12 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     @application.get("/health")
     def health() -> dict:
-        return {"status": "ok", "service": "ReviveRoute", "version": application.version}
+        return {
+            "status": "ok",
+            "service": "ReviveRoute",
+            "version": application.version,
+            "storage": "POSTGRESQL" if repository.is_postgres else "SQLITE",
+        }
 
     @application.get("/", include_in_schema=False)
     def dashboard():

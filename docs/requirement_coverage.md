@@ -21,6 +21,6 @@ The official directions—including checkout abandonment, failed subscriptions, 
 - The dataset is synthetic and exists for development and demonstration.
 - Model outputs are predictive estimates, not causal uplift.
 - The displayed ₹1,800 recovery is produced by signed local simulation, not production revenue.
-- The executor creates only `example.invalid` artifacts: no customer is contacted and no payment API is called.
+- Public, CSV and synthetic cases create only `example.invalid` artifacts. With explicit test credentials, verified Razorpay webhook cases may create Razorpay Test Mode Payment Links; notifications remain disabled.
 - The hosted dashboard is a disposable public sandbox; only fictional data should be entered.
 - Production uplift requires randomized action assignment and real Razorpay webhook outcomes.

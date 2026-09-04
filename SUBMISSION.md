@@ -21,7 +21,7 @@ ReviveRoute combines:
 - calibrated action-specific recovery probabilities;
 - expected-net-value ranking across five interventions;
 - stopping, fatigue, timing and escalation guardrails;
-- a persistent SQLite workflow state machine;
+- a persistent workflow state machine backed by local SQLite or managed PostgreSQL;
 - safe simulated execution with no external calls;
 - signed outcome attribution and separately labelled metrics;
 - a persistent SHA-256 audit chain and verifier;
@@ -50,7 +50,7 @@ The demonstration contacts no customer and calls no payment API.
 
 ## Validation
 
-- 103 automated tests cover data, model, policy, persistence, webhooks, attribution, autonomous execution and failure containment, idempotent public-demo seeding and upgrade, the credential-gated Razorpay test adapter, promise tracking, merchant intake, dashboard and audit integrity.
+- 108 automated tests cover data, model, policy, persistence, webhooks, attribution, autonomous execution and failure containment, idempotent public-demo seeding and upgrade, the credential-gated Razorpay test adapter, promise tracking, merchant intake, dashboard and audit integrity.
 - Invalid signatures fail closed.
 - Exact webhook retries are idempotent; conflicting replays are rejected.
 - Paid outcomes require an existing recovery reference and matching full amount.
@@ -62,4 +62,4 @@ The dataset is synthetic. Predictions are model-based and non-causal. The ₹1,8
 
 ## Technology
 
-Python 3.12, FastAPI, SQLite, pandas, NumPy, scikit-learn, joblib, pytest, HTML, CSS and vanilla JavaScript.
+Python 3.12, FastAPI, PostgreSQL/SQLite, pandas, NumPy, scikit-learn, joblib, pytest, HTML, CSS and vanilla JavaScript.

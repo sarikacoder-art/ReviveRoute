@@ -113,7 +113,7 @@ def test_promise_validation_rejects_bad_dates_and_real_name_claims_are_absent(tm
     with TestClient(create_app(tmp_path / "validation.db", agent_enabled=False)) as api:
         assert api.post("/api/v1/promises", json=payload).status_code == 422
         assert api.post("/api/v1/promises/missing/mark-paid").status_code == 404
-        assert api.get("/health").json()["version"] == "1.2.0"
+        assert api.get("/health").json()["version"] == "1.3.0"
 
 
 def test_dashboard_makes_autonomy_and_fictional_promise_boundary_visible(tmp_path):

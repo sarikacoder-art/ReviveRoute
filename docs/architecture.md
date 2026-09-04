@@ -22,8 +22,8 @@ flowchart TD
 | `ml/features.py` | Defines the feature contract shared by training and inference. |
 | `models/action_model.joblib` | Calibrated recovery-probability estimator for all candidate actions. |
 | `app/decision_engine.py` | Expected-net-value selection plus deterministic stopping, timing and escalation rules. |
-| `app/database.py` | Idempotent cases, candidate scores, workflow state, recovery attribution and persistent audit events. |
-| `app/executor.py` | Safe simulated executor; never contacts customers or Razorpay. |
+| `app/database.py` | Idempotent cases, candidate scores, workflow state, recovery attribution and persistent audit events in PostgreSQL or SQLite. |
+| `app/executor.py` | Hybrid executor: signed Razorpay cases may create Test Mode links; public and synthetic cases remain simulated. |
 | `app/main.py` | FastAPI endpoints, dashboard delivery and workflow orchestration. |
 | `static/` | Judge-facing operations dashboard and one-click demonstration. |
 
@@ -42,4 +42,3 @@ The model proposes five probabilities. Policy rules then remove unsafe actions, 
 3. Terminal workflow states cannot be reopened through invalid transitions.
 4. Outcome attribution requires the exact execution reference and full amount.
 5. The audit verifier detects modification or reordering of stored workflow events.
-
