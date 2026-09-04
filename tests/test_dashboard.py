@@ -20,7 +20,7 @@ def test_dashboard_and_local_assets_are_served(tmp_path):
         assert api.get("/static/dashboard.css").status_code == 200
         assert api.get("/static/dashboard.js").status_code == 200
         assert api.get("/static/favicon.svg").status_code == 200
-        assert api.get("/health").json()["version"] == "0.7.0"
+        assert api.get("/health").json()["version"] == "0.8.0"
 
 
 def test_one_click_demo_closes_the_loop_without_external_calls(tmp_path):

@@ -140,6 +140,17 @@ class RecoveryRepository:
                     evidence_mode TEXT NOT NULL,
                     recovered_at_utc TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS payment_promises (
+                    promise_id TEXT PRIMARY KEY,
+                    customer_id TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    amount_inr REAL NOT NULL CHECK (amount_inr > 0),
+                    promised_at_utc TEXT NOT NULL,
+                    promised_due_utc TEXT NOT NULL,
+                    paid_at_utc TEXT,
+                    source TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL
+                );
                 """
             )
             columns = {row["name"] for row in connection.execute("PRAGMA table_info(recovery_cases)").fetchall()}
@@ -289,6 +300,72 @@ class RecoveryRepository:
                 "recovered_case_count": int(observed["count"]),
                 "recovered_amount_inr": round(float(observed["amount"]), 2),
             },
+        }
+
+    def create_promise(self, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        now = datetime.now(timezone.utc).isoformat()
+        with self.connect() as connection:
+            existing = connection.execute("SELECT * FROM payment_promises WHERE promise_id = ?", (payload["promise_id"],)).fetchone()
+            if existing:
+                return self._promise_view(dict(existing)), True
+            connection.execute(
+                """INSERT INTO payment_promises
+                   (promise_id, customer_id, display_name, amount_inr, promised_at_utc,
+                    promised_due_utc, paid_at_utc, source, created_at_utc)
+                   VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)""",
+                (payload["promise_id"], payload["customer_id"], payload["display_name"],
+                 float(payload["amount_inr"]), payload["promised_at_utc"],
+                 payload["promised_due_utc"], payload["source"], now),
+            )
+            connection.commit()
+        return self.get_promise(payload["promise_id"]), False
+
+    @staticmethod
+    def _promise_view(row: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+        current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        due = datetime.fromisoformat(row["promised_due_utc"])
+        if row.get("paid_at_utc"):
+            status = "PROMISE_KEPT" if datetime.fromisoformat(row["paid_at_utc"]) <= due else "PAID_LATE"
+        elif current > due:
+            status = "PROMISE_BROKEN"
+        elif due.date() == current.date():
+            status = "DUE_TODAY"
+        else:
+            status = "PROMISE_ACTIVE"
+        return {**row, "status": status, "days_overdue": max(0, (current.date() - due.date()).days) if not row.get("paid_at_utc") else 0}
+
+    def get_promise(self, promise_id: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM payment_promises WHERE promise_id = ?", (promise_id,)).fetchone()
+        if not row:
+            raise CaseNotFoundError(promise_id)
+        return self._promise_view(dict(row))
+
+    def list_promises(self, limit: int = 100) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute("SELECT * FROM payment_promises ORDER BY promised_due_utc LIMIT ?", (limit,)).fetchall()
+        return [self._promise_view(dict(row)) for row in rows]
+
+    def mark_promise_paid(self, promise_id: str, paid_at_utc: str) -> dict[str, Any]:
+        with self.connect() as connection:
+            changed = connection.execute("UPDATE payment_promises SET paid_at_utc = ? WHERE promise_id = ? AND paid_at_utc IS NULL", (paid_at_utc, promise_id))
+            connection.commit()
+        if changed.rowcount == 0:
+            return self.get_promise(promise_id)
+        return self.get_promise(promise_id)
+
+    def promise_summary(self) -> dict[str, Any]:
+        promises = self.list_promises(500)
+        broken = [item for item in promises if item["status"] == "PROMISE_BROKEN"]
+        paid = [item for item in promises if item["paid_at_utc"]]
+        kept = [item for item in promises if item["status"] == "PROMISE_KEPT"]
+        return {
+            "evidence_label": "promise tracking only; fictional labels in demo data and no ML inference",
+            "promise_count": len(promises),
+            "broken_count": len(broken),
+            "broken_amount_inr": round(sum(item["amount_inr"] for item in broken), 2),
+            "outstanding_amount_inr": round(sum(item["amount_inr"] for item in promises if not item["paid_at_utc"]), 2),
+            "promise_kept_rate": round(len(kept) / len(paid), 4) if paid else 0.0,
         }
 
     def register_webhook(self, delivery_id: str, event_type: str, raw_body: bytes) -> dict[str, Any] | None:

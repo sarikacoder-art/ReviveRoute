@@ -101,12 +101,13 @@ def test_missing_secret_signature_and_delivery_id_fail_closed(tmp_path):
 
 
 def test_failed_webhook_creates_one_case_and_exact_replay_is_idempotent(tmp_path):
+    event = failed_event()
     with TestClient(create_app(tmp_path / "replay.db", webhook_secret=SECRET)) as api:
-        first = signed_post(api, failed_event(), "delivery_replay")
+        first = signed_post(api, event, "delivery_replay")
         assert first.status_code == 200
         assert first.json()["case"]["amount_inr"] == 4200.0
         assert first.json()["case"]["source_payment_id"] == "pay_failed_demo"
-        replay = signed_post(api, failed_event(), "delivery_replay")
+        replay = signed_post(api, event, "delivery_replay")
         assert replay.status_code == 200 and replay.json()["duplicate"] is True
         assert api.get("/api/v1/summary").json()["case_count"] == 1
 

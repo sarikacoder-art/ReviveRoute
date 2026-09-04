@@ -174,6 +174,12 @@ CSV imports are bounded to 512 KB and 100 rows. Required fields, enum values, am
 
 Current result: **88 passed**. Intake tests cover the downloadable template, valid and invalid rows, defaults, idempotent replay, byte and row limits, sample-batch bounds, evidence labels and dashboard controls. See `docs/merchant_intake.md`.
 
+## Milestone 9 — Visible autonomous agent and promise watchlist
+
+`app/agent_worker.py` now runs the bounded executor continuously while the API process is awake. The dashboard exposes its heartbeat, poll cycles and safe executions, making the autonomous observe-decide-execute loop visible. Execution is still deliberately simulated.
+
+A separate rules-based promise-to-pay watchlist shows active, due, kept, late-paid and broken commitments plus outstanding and overdue money. Sample names are fictional display labels and identity is never used as an ML feature. The recovery model remains honestly labelled synthetic until consented merchant action-outcome history is available. See `docs/autonomous_agent_and_promises.md`.
+
 ## Deployment boundary
 
 Real Razorpay test-mode Payment Link creation remains behind an explicit configuration switch. The public demo never contacts a customer or payment API.

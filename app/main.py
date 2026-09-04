@@ -3,44 +3,55 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
+import uuid
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.database import CaseConflictError, CaseNotFoundError, InvalidTransitionError, RecoveryAttributionError, RecoveryRepository, WebhookConflictError
+from app.agent_worker import RecoveryAgentWorker
 from app.decision_engine import DecisionEngine, RecoveryCase
 from app.demo import DemoFlow
 from app.executor import SimulatedExecutor
 from app.intake import IntakeError, csv_template, parse_csv_batch, sample_batch
-from app.schemas import FailedPaymentRequest, TransitionRequest
+from app.schemas import FailedPaymentRequest, PromiseToPayRequest, TransitionRequest
 from app.webhooks import WebhookPayloadError, failed_payment_to_case, parse_webhook, payment_entity, payment_link_outcome, verify_webhook_signature
 
 DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "data" / "reviveroute.db"
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 
-def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None) -> FastAPI:
+def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None, agent_enabled: bool | None = None, agent_interval_seconds: float = 10.0) -> FastAPI:
     repository = RecoveryRepository(database_path)
+    executor = SimulatedExecutor(repository)
+    worker = RecoveryAgentWorker(executor, interval_seconds=agent_interval_seconds)
+    should_run_agent = agent_enabled if agent_enabled is not None else os.getenv("REVIVEROUTE_AGENT_ENABLED", "true").lower() == "true"
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         repository.initialize()
-        yield
+        if should_run_agent:
+            await worker.start()
+        try:
+            yield
+        finally:
+            await worker.stop()
 
     application = FastAPI(
         title="ReviveRoute API",
-        version="0.7.0",
+        version="0.8.0",
         description="Bounded failed-payment recovery workflow prototype",
         lifespan=lifespan,
     )
     application.state.repository = repository
     application.state.engine = engine
     application.state.webhook_secret = webhook_secret if webhook_secret is not None else os.getenv("RAZORPAY_WEBHOOK_SECRET")
-    application.state.executor = SimulatedExecutor(repository)
+    application.state.executor = executor
+    application.state.agent_worker = worker
 
     def get_engine() -> DecisionEngine:
         if application.state.engine is None:
@@ -140,6 +151,51 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     def run_due_actions(limit: int = Query(default=50, ge=1, le=200)):
         executions = application.state.executor.run_due(limit=limit)
         return {"execution_mode": "SIMULATED", "customer_contacted": False, "payment_api_called": False, "executions": executions}
+
+    @application.get("/api/v1/agent/status")
+    def agent_status():
+        return worker.status()
+
+    @application.post("/api/v1/promises", status_code=status.HTTP_201_CREATED)
+    def create_payment_promise(payload: PromiseToPayRequest):
+        stored, duplicate = repository.create_promise(payload.model_dump(mode="json"))
+        return {"duplicate": duplicate, "promise": stored}
+
+    @application.get("/api/v1/promises")
+    def list_payment_promises(limit: int = Query(default=100, ge=1, le=200)):
+        return {"promises": repository.list_promises(limit), "summary": repository.promise_summary()}
+
+    @application.post("/api/v1/promises/{promise_id}/mark-paid")
+    def mark_payment_promise_paid(promise_id: str):
+        try:
+            return repository.mark_promise_paid(promise_id, datetime.now(timezone.utc).isoformat())
+        except CaseNotFoundError:
+            raise HTTPException(status_code=404, detail="payment promise not found")
+
+    @application.post("/api/v1/promises/sample")
+    def load_sample_promises():
+        token = uuid.uuid4().hex[:8]
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        fixtures = [
+            ("Aarav Traders", 18000, -4, None),
+            ("BluePeak Studio", 42500, -1, None),
+            ("Cedar Learning", 9600, 0, None),
+            ("Dawn Retail", 27500, 2, None),
+            ("Evergreen Foods", 14200, -2, -3),
+            ("Futura Labs", 33000, -3, -1),
+        ]
+        created = []
+        for index, (name, amount, due_offset, paid_offset) in enumerate(fixtures):
+            payload = PromiseToPayRequest(
+                promise_id=f"promise_demo_{token}_{index + 1}", customer_id=f"demo_org_{token}_{index + 1}",
+                display_name=name, amount_inr=amount, promised_at_utc=now - timedelta(days=7),
+                promised_due_utc=now + timedelta(days=due_offset), source="SYNTHETIC_DEMO",
+            )
+            item, _ = repository.create_promise(payload.model_dump(mode="json"))
+            if paid_offset is not None:
+                item = repository.mark_promise_paid(payload.promise_id, (now + timedelta(days=paid_offset)).isoformat())
+            created.append(item)
+        return {"evidence_label": "fictional promise-to-pay demonstration; no real customer data", "created": len(created), "summary": repository.promise_summary()}
 
     @application.post("/api/v1/demo/run")
     def run_complete_demo():

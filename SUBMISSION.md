@@ -27,6 +27,8 @@ ReviveRoute combines:
 - a persistent SHA-256 audit chain and verifier;
 - a judge-facing dashboard with a one-click end-to-end demo.
 - manual and bounded CSV merchant intake, a downloadable template and a synthetic sample-batch explorer.
+- a lifecycle-managed autonomous worker with a visible heartbeat and safe due-action execution;
+- a separate promise-to-pay watchlist using fictional demo labels and deterministic status rules.
 
 ## Why it is differentiated
 
@@ -48,7 +50,7 @@ The demonstration contacts no customer and calls no payment API.
 
 ## Validation
 
-- 88 automated tests cover data, model, policy, persistence, webhooks, attribution, merchant intake, dashboard and audit integrity.
+- 94 automated tests cover data, model, policy, persistence, webhooks, attribution, autonomous execution, promise tracking, merchant intake, dashboard and audit integrity.
 - Invalid signatures fail closed.
 - Exact webhook retries are idempotent; conflicting replays are rejected.
 - Paid outcomes require an existing recovery reference and matching full amount.
