@@ -180,6 +180,10 @@ Current result: **88 passed**. Intake tests cover the downloadable template, val
 
 A separate rules-based promise-to-pay watchlist shows active, due, kept, late-paid and broken commitments plus outstanding and overdue money. Sample names are fictional display labels and identity is never used as an ML feature. The recovery model remains honestly labelled synthetic until consented merchant action-outcome history is available. See `docs/autonomous_agent_and_promises.md`.
 
+## Milestone 10 — Always-ready public demonstration
+
+An empty deployed database is now populated automatically with 40 synthetic failed payments, a varied portfolio of signed simulated recoveries, and six fictional payment promises before the autonomous worker starts. Recovered examples span multiple failure reasons and the `LINK_NOW`, `LINK_AFTER_2H`, and `LINK_NEXT_MORNING` options. Seeding is idempotent, independently checks both datasets and can be disabled with `REVIVEROUTE_AUTO_SEED=false`. This prevents an empty judge dashboard after Render resets its temporary filesystem. See `docs/public_demo_seed.md`.
+
 ## Deployment boundary
 
 Real Razorpay test-mode Payment Link creation remains behind an explicit configuration switch. The public demo never contacts a customer or payment API.

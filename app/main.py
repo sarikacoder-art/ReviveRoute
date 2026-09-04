@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import os
 from pathlib import Path
-import uuid
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -16,6 +15,7 @@ from app.database import CaseConflictError, CaseNotFoundError, InvalidTransition
 from app.agent_worker import RecoveryAgentWorker
 from app.decision_engine import DecisionEngine, RecoveryCase
 from app.demo import DemoFlow
+from app.demo_seed import seed_empty_demo, seed_sample_promises
 from app.executor import SimulatedExecutor
 from app.intake import IntakeError, csv_template, parse_csv_batch, sample_batch
 from app.schemas import FailedPaymentRequest, PromiseToPayRequest, TransitionRequest
@@ -25,7 +25,7 @@ DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "data" / "revivero
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 
-def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None, agent_enabled: bool | None = None, agent_interval_seconds: float = 10.0) -> FastAPI:
+def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None, agent_enabled: bool | None = None, agent_interval_seconds: float = 10.0, auto_seed: bool = False) -> FastAPI:
     repository = RecoveryRepository(database_path)
     executor = SimulatedExecutor(repository)
     worker = RecoveryAgentWorker(executor, interval_seconds=agent_interval_seconds)
@@ -34,6 +34,8 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         repository.initialize()
+        if auto_seed:
+            application.state.seed_status = seed_empty_demo(repository, get_engine(), executor)
         if should_run_agent:
             await worker.start()
         try:
@@ -43,7 +45,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     application = FastAPI(
         title="ReviveRoute API",
-        version="0.8.0",
+        version="1.0.0",
         description="Bounded failed-payment recovery workflow prototype",
         lifespan=lifespan,
     )
@@ -52,6 +54,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     application.state.webhook_secret = webhook_secret if webhook_secret is not None else os.getenv("RAZORPAY_WEBHOOK_SECRET")
     application.state.executor = executor
     application.state.agent_worker = worker
+    application.state.seed_status = {"mode": "DISABLED", "production_claim": False}
 
     def get_engine() -> DecisionEngine:
         if application.state.engine is None:
@@ -156,6 +159,10 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     def agent_status():
         return worker.status()
 
+    @application.get("/api/v1/demo/seed-status")
+    def demo_seed_status():
+        return application.state.seed_status
+
     @application.post("/api/v1/promises", status_code=status.HTTP_201_CREATED)
     def create_payment_promise(payload: PromiseToPayRequest):
         stored, duplicate = repository.create_promise(payload.model_dump(mode="json"))
@@ -174,28 +181,8 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     @application.post("/api/v1/promises/sample")
     def load_sample_promises():
-        token = uuid.uuid4().hex[:8]
-        now = datetime.now(timezone.utc).replace(microsecond=0)
-        fixtures = [
-            ("Aarav Traders", 18000, -4, None),
-            ("BluePeak Studio", 42500, -1, None),
-            ("Cedar Learning", 9600, 0, None),
-            ("Dawn Retail", 27500, 2, None),
-            ("Evergreen Foods", 14200, -2, -3),
-            ("Futura Labs", 33000, -3, -1),
-        ]
-        created = []
-        for index, (name, amount, due_offset, paid_offset) in enumerate(fixtures):
-            payload = PromiseToPayRequest(
-                promise_id=f"promise_demo_{token}_{index + 1}", customer_id=f"demo_org_{token}_{index + 1}",
-                display_name=name, amount_inr=amount, promised_at_utc=now - timedelta(days=7),
-                promised_due_utc=now + timedelta(days=due_offset), source="SYNTHETIC_DEMO",
-            )
-            item, _ = repository.create_promise(payload.model_dump(mode="json"))
-            if paid_offset is not None:
-                item = repository.mark_promise_paid(payload.promise_id, (now + timedelta(days=paid_offset)).isoformat())
-            created.append(item)
-        return {"evidence_label": "fictional promise-to-pay demonstration; no real customer data", "created": len(created), "summary": repository.promise_summary()}
+        created = seed_sample_promises(repository)
+        return {"evidence_label": "fictional promise-to-pay demonstration; no real customer data", "created": created, "summary": repository.promise_summary()}
 
     @application.post("/api/v1/demo/run")
     def run_complete_demo():
@@ -264,5 +251,5 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     return application
 
 
-app = create_app()
+app = create_app(auto_seed=os.getenv("REVIVEROUTE_AUTO_SEED", "true").lower() == "true")
 

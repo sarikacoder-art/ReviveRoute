@@ -248,12 +248,17 @@ class RecoveryRepository:
     def list_cases(self, limit: int = 50) -> list[dict[str, Any]]:
         with self.connect() as connection:
             rows = connection.execute(
-                """SELECT event_id, source_payment_id, customer_id, amount_inr, selected_action, workflow_status,
+                """SELECT event_id, source_payment_id, customer_id, request_json, amount_inr, selected_action, workflow_status,
                           expected_net_value, created_at_utc, updated_at_utc
                    FROM recovery_cases ORDER BY created_at_utc DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        cases = []
+        for row in rows:
+            item = dict(row)
+            item["failure_reason"] = json.loads(item.pop("request_json"))["failure_reason"]
+            cases.append(item)
+        return cases
 
     def transition(self, event_id: str, to_status: str, reason: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
