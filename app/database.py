@@ -673,14 +673,15 @@ class RecoveryRepository:
         results = []
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            rows = connection.execute(
-                """SELECT event_id, selected_action, workflow_status FROM recovery_cases
-                   WHERE workflow_status = 'SCHEDULED' AND execute_after_utc IS NOT NULL AND execute_after_utc <= ?
-                     AND (? IS NULL OR event_id = ?)
-                     AND selected_action IN ('LINK_NOW', 'LINK_AFTER_2H', 'LINK_NEXT_MORNING')
-                   ORDER BY execute_after_utc LIMIT ?""",
-                (now.isoformat(), event_id, event_id, limit),
-            ).fetchall()
+            query = """SELECT event_id, selected_action, workflow_status FROM recovery_cases
+                       WHERE workflow_status = 'SCHEDULED' AND execute_after_utc IS NOT NULL AND execute_after_utc <= ?"""
+            params: tuple[Any, ...] = (now.isoformat(),)
+            if event_id is not None:
+                query += " AND event_id = ?"
+                params += (event_id,)
+            query += """ AND selected_action IN ('LINK_NOW', 'LINK_AFTER_2H', 'LINK_NEXT_MORNING')
+                       ORDER BY execute_after_utc LIMIT ?"""
+            rows = connection.execute(query, (*params, limit)).fetchall()
             for row in rows:
                 event_id, action = row["event_id"], row["selected_action"]
                 reference_id = reference_factory(event_id)
