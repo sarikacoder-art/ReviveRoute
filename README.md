@@ -198,4 +198,8 @@ Current verification: **103 passing tests**. See `docs/judge_readiness.md`.
 
 ## Deployment boundary
 
-Real Razorpay test-mode Payment Link creation remains behind an explicit configuration switch. The public demo never contacts a customer or payment API.
+## Milestone 13 — Razorpay Test Mode execution
+
+Set `RAZORPAY_TEST_MODE_ENABLED=true` together with private `rzp_test_` credentials to activate the hybrid executor. Only cases originating from a verified Razorpay webhook can call the Payment Links API; manual, CSV and synthetic cases remain simulated. Notifications and reminders are disabled, live key IDs are rejected, provider failures are audited, and `payment_link.paid` closes the exact attributed case. See `docs/razorpay_test_mode.md`.
+
+Without this explicit switch and valid test credentials, ReviveRoute remains fully simulated.

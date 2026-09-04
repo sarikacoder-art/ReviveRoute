@@ -127,7 +127,7 @@ class RecoveryRepository:
                     reference_id TEXT PRIMARY KEY,
                     event_id TEXT NOT NULL UNIQUE REFERENCES recovery_cases(event_id) ON DELETE CASCADE,
                     action TEXT NOT NULL,
-                    execution_mode TEXT NOT NULL CHECK (execution_mode = 'SIMULATED'),
+                    execution_mode TEXT NOT NULL CHECK (execution_mode IN ('SIMULATED', 'RAZORPAY_TEST')),
                     artifact_url TEXT NOT NULL,
                     created_at_utc TEXT NOT NULL
                 );
@@ -149,6 +149,14 @@ class RecoveryRepository:
                     promised_due_utc TEXT NOT NULL,
                     paid_at_utc TEXT,
                     source TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS razorpay_test_executions (
+                    reference_id TEXT PRIMARY KEY,
+                    event_id TEXT NOT NULL UNIQUE REFERENCES recovery_cases(event_id) ON DELETE CASCADE,
+                    action TEXT NOT NULL,
+                    payment_link_id TEXT NOT NULL UNIQUE,
+                    artifact_url TEXT NOT NULL,
                     created_at_utc TEXT NOT NULL
                 );
                 """
@@ -290,7 +298,7 @@ class RecoveryRepository:
             observed = connection.execute(
                 "SELECT COUNT(*) AS count, COALESCE(SUM(recovered_amount_inr), 0) AS amount FROM recovery_outcomes"
             ).fetchone()
-            executions = connection.execute("SELECT COUNT(*) AS count FROM executions").fetchone()
+            executions = connection.execute("SELECT COUNT(*) AS count FROM executions").fetchone()["count"]
             recovered_rows = connection.execute(
                 """SELECT c.request_json, c.selected_action, o.recovered_amount_inr
                    FROM recovery_outcomes o JOIN recovery_cases c ON c.event_id = o.event_id"""
@@ -307,7 +315,7 @@ class RecoveryRepository:
         breakdown_rows = sorted(breakdown.values(), key=lambda item: (-item["recovered_amount_inr"], item["failure_reason"]))
         for item in breakdown_rows:
             item["recovered_amount_inr"] = round(item["recovered_amount_inr"], 2)
-        execution_count = int(executions["count"])
+        execution_count = int(executions)
         recovered_count = int(observed["count"])
         return {
             "evidence_label": "model-based expectations; not observed or causal revenue",
@@ -331,8 +339,76 @@ class RecoveryRepository:
         with self.connect() as connection:
             total = connection.execute("SELECT COUNT(*) AS count FROM executions").fetchone()["count"]
             by_mode = connection.execute("SELECT execution_mode, COUNT(*) AS count FROM executions GROUP BY execution_mode").fetchall()
+            test_total = connection.execute("SELECT COUNT(*) AS count FROM razorpay_test_executions").fetchone()["count"]
             failed = connection.execute("SELECT COUNT(*) AS count FROM workflow_events WHERE event_type = 'EXECUTION_FAILED'").fetchone()["count"]
-        return {"persisted_executions": int(total), "failed_executions": int(failed), "mode_distribution": {row["execution_mode"]: row["count"] for row in by_mode}}
+        distribution = {row["execution_mode"]: row["count"] for row in by_mode}
+        if test_total:
+            # Older SQLite demo databases constrained this column to SIMULATED;
+            # the companion table is the authoritative provider-mode record.
+            distribution["SIMULATED"] = max(0, int(distribution.get("SIMULATED", 0)) - int(test_total))
+            distribution["RAZORPAY_TEST"] = int(test_total)
+        return {"persisted_executions": int(total), "failed_executions": int(failed), "mode_distribution": distribution}
+
+    def claim_due_razorpay_test(self, now: datetime, limit: int = 20) -> list[dict[str, Any]]:
+        """Atomically claim signed Razorpay-sourced cases for test-mode execution."""
+        claimed: list[dict[str, Any]] = []
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                """SELECT event_id, selected_action, amount_inr FROM recovery_cases
+                   WHERE workflow_status = 'SCHEDULED' AND source_payment_id IS NOT NULL
+                     AND execute_after_utc IS NOT NULL AND execute_after_utc <= ?
+                     AND selected_action IN ('LINK_NOW', 'LINK_AFTER_2H', 'LINK_NEXT_MORNING')
+                   ORDER BY execute_after_utc LIMIT ?""",
+                (now.isoformat(), limit),
+            ).fetchall()
+            for row in rows:
+                connection.execute(
+                    "UPDATE recovery_cases SET workflow_status = 'EXECUTING', updated_at_utc = ? WHERE event_id = ? AND workflow_status = 'SCHEDULED'",
+                    (now.isoformat(), row["event_id"]),
+                )
+                self._append_event(connection, row["event_id"], "EXECUTION_STARTED", "SCHEDULED", "EXECUTING", {"mode": "RAZORPAY_TEST"}, now.isoformat())
+                claimed.append(dict(row))
+            connection.commit()
+        return claimed
+
+    def complete_razorpay_test_execution(self, event_id: str, action: str, result: dict[str, Any], now: datetime) -> dict[str, Any]:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    """INSERT INTO executions
+                       (reference_id, event_id, action, execution_mode, artifact_url, created_at_utc)
+                       VALUES (?, ?, ?, 'RAZORPAY_TEST', ?, ?)""",
+                    (result["reference_id"], event_id, action, result["short_url"], now.isoformat()),
+                )
+            except sqlite3.IntegrityError as error:
+                if "CHECK constraint failed" not in str(error):
+                    raise
+                connection.execute(
+                    """INSERT INTO executions
+                       (reference_id, event_id, action, execution_mode, artifact_url, created_at_utc)
+                       VALUES (?, ?, ?, 'SIMULATED', ?, ?)""",
+                    (result["reference_id"], event_id, action, result["short_url"], now.isoformat()),
+                )
+            connection.execute(
+                """INSERT INTO razorpay_test_executions
+                   (reference_id, event_id, action, payment_link_id, artifact_url, created_at_utc)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (result["reference_id"], event_id, action, result["payment_link_id"], result["short_url"], now.isoformat()),
+            )
+            payload = {**result, "mode": "RAZORPAY_TEST", "customer_contacted": False, "payment_api_called": True}
+            self._append_event(connection, event_id, "RAZORPAY_TEST_LINK_CREATED", "EXECUTING", "ACTION_SENT", payload, now.isoformat())
+            connection.execute("UPDATE recovery_cases SET workflow_status = 'ACTION_SENT', updated_at_utc = ? WHERE event_id = ?", (now.isoformat(), event_id))
+            connection.commit()
+        return {"event_id": event_id, "action": action, **payload}
+
+    def fail_razorpay_test_execution(self, event_id: str, error: str, now: datetime) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._append_event(connection, event_id, "EXECUTION_FAILED", "EXECUTING", "FAILED", {"mode": "RAZORPAY_TEST", "error": error[:300]}, now.isoformat())
+            connection.execute("UPDATE recovery_cases SET workflow_status = 'FAILED', updated_at_utc = ? WHERE event_id = ?", (now.isoformat(), event_id))
+            connection.commit()
 
     def make_case_due_for_demo(self, event_id: str) -> None:
         """Move only a synthetic autonomous-proof case into the due queue."""
@@ -509,8 +585,11 @@ class RecoveryRepository:
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             execution = connection.execute(
-                """SELECT e.event_id, c.amount_inr, c.workflow_status FROM executions e
-                   JOIN recovery_cases c ON c.event_id = e.event_id WHERE e.reference_id = ?""",
+                """SELECT x.event_id, c.amount_inr, c.workflow_status FROM (
+                       SELECT reference_id, event_id FROM executions
+                       UNION ALL
+                       SELECT reference_id, event_id FROM razorpay_test_executions
+                   ) x JOIN recovery_cases c ON c.event_id = x.event_id WHERE x.reference_id = ?""",
                 (reference_id,),
             ).fetchone()
             if not execution:

@@ -42,7 +42,8 @@ def test_test_adapter_builds_non_notifying_payment_link_request():
 def test_integration_status_never_exposes_secret(tmp_path, monkeypatch):
     monkeypatch.setenv("RAZORPAY_TEST_KEY_ID", "rzp_test_example")
     monkeypatch.setenv("RAZORPAY_TEST_KEY_SECRET", "super-secret")
+    monkeypatch.setenv("RAZORPAY_TEST_MODE_ENABLED", "true")
     with TestClient(create_app(tmp_path / "status.db", agent_enabled=False)) as api:
         payload = api.get("/api/v1/integrations/razorpay-test/status").json()
-        assert payload == {"mode": "RAZORPAY_TEST", "configured": True, "live_credentials_accepted": False, "secret_exposed": False}
+        assert payload == {"mode": "RAZORPAY_TEST", "enabled": True, "configured": True, "ready": True, "scope": "SIGNED_RAZORPAY_WEBHOOK_CASES_ONLY", "live_credentials_accepted": False, "secret_exposed": False}
         assert "super-secret" not in str(payload)

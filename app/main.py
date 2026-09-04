@@ -18,7 +18,7 @@ from app.agent_worker import RecoveryAgentWorker
 from app.decision_engine import DecisionEngine, RecoveryCase
 from app.demo import DemoFlow
 from app.demo_seed import seed_empty_demo, seed_sample_promises
-from app.executor import SimulatedExecutor
+from app.executor import HybridTestExecutor, SimulatedExecutor
 from app.intake import IntakeError, csv_template, parse_csv_batch, sample_batch
 from app.razorpay_test import RazorpayTestClient
 from app.schemas import FailedPaymentRequest, PromiseToPayRequest, TransitionRequest
@@ -28,9 +28,11 @@ DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "data" / "revivero
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 
-def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None, agent_enabled: bool | None = None, agent_interval_seconds: float = 10.0, auto_seed: bool = False) -> FastAPI:
+def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: DecisionEngine | None = None, webhook_secret: str | None = None, agent_enabled: bool | None = None, agent_interval_seconds: float = 10.0, auto_seed: bool = False, razorpay_test_enabled: bool | None = None) -> FastAPI:
     repository = RecoveryRepository(database_path)
-    executor = SimulatedExecutor(repository)
+    simulated_executor = SimulatedExecutor(repository)
+    test_enabled = razorpay_test_enabled if razorpay_test_enabled is not None else os.getenv("RAZORPAY_TEST_MODE_ENABLED", "false").lower() == "true"
+    executor = HybridTestExecutor(repository, RazorpayTestClient.from_environment()) if test_enabled else simulated_executor
     worker = RecoveryAgentWorker(executor, interval_seconds=agent_interval_seconds)
     should_run_agent = agent_enabled if agent_enabled is not None else os.getenv("REVIVEROUTE_AGENT_ENABLED", "true").lower() == "true"
 
@@ -38,7 +40,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     async def lifespan(_: FastAPI):
         repository.initialize()
         if auto_seed:
-            application.state.seed_status = seed_empty_demo(repository, get_engine(), executor)
+            application.state.seed_status = seed_empty_demo(repository, get_engine(), simulated_executor)
         if should_run_agent:
             await worker.start()
         try:
@@ -48,7 +50,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     application = FastAPI(
         title="ReviveRoute API",
-        version="1.1.0",
+        version="1.2.0",
         description="Bounded failed-payment recovery workflow prototype",
         lifespan=lifespan,
     )
@@ -56,6 +58,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     application.state.engine = engine
     application.state.webhook_secret = webhook_secret if webhook_secret is not None else os.getenv("RAZORPAY_WEBHOOK_SECRET")
     application.state.executor = executor
+    application.state.simulated_executor = simulated_executor
     application.state.agent_worker = worker
     application.state.seed_status = {"mode": "DISABLED", "production_claim": False}
 
@@ -156,7 +159,12 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     @application.post("/api/v1/executor/run-due")
     def run_due_actions(limit: int = Query(default=50, ge=1, le=200)):
         executions = application.state.executor.run_due(limit=limit)
-        return {"execution_mode": "SIMULATED", "customer_contacted": False, "payment_api_called": False, "executions": executions}
+        return {
+            "execution_mode": application.state.executor.mode,
+            "customer_contacted": False,
+            "payment_api_called": any(item.get("payment_api_called", False) for item in executions),
+            "executions": executions,
+        }
 
     @application.get("/api/v1/agent/status")
     def agent_status():
@@ -234,7 +242,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     @application.post("/api/v1/demo/run")
     def run_complete_demo():
         try:
-            return DemoFlow(repository, get_engine(), application.state.executor).run()
+            return DemoFlow(repository, get_engine(), application.state.simulated_executor).run()
         except RuntimeError as error:
             raise HTTPException(status_code=500, detail=str(error))
 

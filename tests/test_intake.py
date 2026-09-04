@@ -96,4 +96,4 @@ def test_dashboard_exposes_all_three_intake_paths_and_version(tmp_path):
         assert "Import a CSV batch" in page
         assert "Load sample batch" in page
         assert "Use fictional data only" in page
-        assert api.get("/health").json()["version"] == "1.1.0"
+        assert api.get("/health").json()["version"] == "1.2.0"

@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from app.executor import SimulatedExecutor
+from app.executor import HybridTestExecutor, SimulatedExecutor
 
 
 class RecoveryAgentWorker:
-    def __init__(self, executor: SimulatedExecutor, interval_seconds: float = 10.0) -> None:
+    def __init__(self, executor: SimulatedExecutor | HybridTestExecutor, interval_seconds: float = 10.0) -> None:
         self.executor = executor
         self.interval_seconds = max(0.05, interval_seconds)
         self.task: asyncio.Task | None = None
@@ -55,7 +55,7 @@ class RecoveryAgentWorker:
     def status(self) -> dict:
         persisted = self.executor.repository.execution_summary()
         return {
-            "agent_mode": "AUTONOMOUS_SIMULATED",
+            "agent_mode": self.executor.mode,
             "running": self.running,
             "poll_interval_seconds": self.interval_seconds,
             "cycles_completed": self.cycles,
@@ -64,5 +64,6 @@ class RecoveryAgentWorker:
             "last_run_utc": self.last_run_utc,
             "last_error": self.last_error,
             "customer_contacted": False,
-            "payment_api_called": False,
+            "payment_api_enabled": self.executor.mode == "HYBRID_RAZORPAY_TEST",
+            "payment_api_called": persisted.get("mode_distribution", {}).get("RAZORPAY_TEST", 0) > 0,
         }

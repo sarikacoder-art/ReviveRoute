@@ -15,12 +15,14 @@ def test_dashboard_and_local_assets_are_served(tmp_path):
         assert page.status_code == 200
         assert "ReviveRoute" in page.text
         assert "Run end-to-end demo" in page.text
-        assert "Synthetic + signed simulation" in page.text
+        assert "Simulation + Razorpay Test Mode" in page.text
+        assert '/static/dashboard.css?v=1.2.0' in page.text
+        assert '/static/dashboard.js?v=1.2.0' in page.text
         assert api.get("/dashboard").status_code == 200
         assert api.get("/static/dashboard.css").status_code == 200
         assert api.get("/static/dashboard.js").status_code == 200
         assert api.get("/static/favicon.svg").status_code == 200
-        assert api.get("/health").json()["version"] == "1.1.0"
+        assert api.get("/health").json()["version"] == "1.2.0"
 
 
 def test_one_click_demo_closes_the_loop_without_external_calls(tmp_path):

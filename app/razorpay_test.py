@@ -42,9 +42,14 @@ class RazorpayTestClient:
     def status(cls) -> dict[str, Any]:
         key_id = os.getenv("RAZORPAY_TEST_KEY_ID", "")
         secret = os.getenv("RAZORPAY_TEST_KEY_SECRET", "")
+        enabled = os.getenv("RAZORPAY_TEST_MODE_ENABLED", "false").lower() == "true"
+        configured = key_id.startswith("rzp_test_") and bool(secret)
         return {
-            "mode": "RAZORPAY_TEST" if key_id.startswith("rzp_test_") and bool(secret) else "SIMULATED",
-            "configured": key_id.startswith("rzp_test_") and bool(secret),
+            "mode": "RAZORPAY_TEST" if enabled and configured else "SIMULATED",
+            "enabled": enabled,
+            "configured": configured,
+            "ready": enabled and configured,
+            "scope": "SIGNED_RAZORPAY_WEBHOOK_CASES_ONLY",
             "live_credentials_accepted": False,
             "secret_exposed": False,
         }

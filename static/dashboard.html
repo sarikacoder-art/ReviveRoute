@@ -6,7 +6,7 @@
   <meta name="description" content="ReviveRoute bounded payment recovery operations dashboard">
   <title>ReviveRoute · Revenue Recovery Command Center</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/dashboard.css">
+  <link rel="stylesheet" href="/static/dashboard.css?v=1.2.0">
 </head>
 <body>
   <div class="app-shell">
@@ -26,7 +26,7 @@
       </nav>
       <div class="sidebar-note">
         <span class="status-dot"></span>
-        <div><strong>Safe demo mode</strong><small>No customer contact<br>No payment API calls</small></div>
+        <div><strong>Bounded test mode</strong><small>No automatic notifications<br>Live keys rejected</small></div>
       </div>
     </aside>
 
@@ -37,7 +37,7 @@
           <h1>Command center</h1>
         </div>
         <div class="topbar-actions">
-          <span class="evidence-pill"><span></span>Synthetic + signed simulation</span>
+          <span class="evidence-pill"><span></span>Simulation + Razorpay Test Mode</span>
           <button id="refreshButton" class="icon-button" title="Refresh dashboard" aria-label="Refresh dashboard">↻</button>
         </div>
       </header>
@@ -78,7 +78,7 @@
         <article class="metric-card accent-amber"><p>Audit integrity</p><h3 id="auditMetric">Checking…</h3><small id="auditEntries">0 events verified</small></article>
       </section>
 
-      <section class="panel agent-panel" id="agent"><div class="agent-pulse"><span></span></div><div><p class="eyebrow">AUTONOMOUS WORKER</p><h2>ReviveRoute is watching the queue.</h2><p id="agentDescription">Checking worker heartbeat…</p><button class="secondary-button agent-proof-button" id="agentProofButton" type="button">Prove autonomous execution</button></div><div class="agent-stats"><div><strong id="agentCycles">0</strong><small>poll cycles</small></div><div><strong id="agentExecutions">0</strong><small>persisted executions</small></div><div><strong id="agentLastRun">—</strong><small>last heartbeat</small></div></div></section>
+      <section class="panel agent-panel" id="agent"><div class="agent-pulse"><span></span></div><div><p class="eyebrow">AUTONOMOUS WORKER</p><h2>ReviveRoute is watching the queue.</h2><p id="agentDescription">Checking worker heartbeat…</p><button class="secondary-button agent-proof-button" id="agentProofButton" type="button">Prove autonomous execution</button></div><div class="agent-stats"><div><strong id="integrationMode">Checking…</strong><small>execution mode</small></div><div><strong id="agentCycles">0</strong><small>poll cycles</small></div><div><strong id="agentExecutions">0</strong><small>persisted executions</small></div><div><strong id="agentLastRun">—</strong><small>last heartbeat</small></div></div></section>
 
       <section class="panel workflow-panel" id="workflow">
         <div class="panel-heading"><div><p class="eyebrow">THE CLOSED LOOP</p><h2>From signal to recovered revenue</h2></div><span class="live-chip">● LIVE POLICY</span></div>
@@ -121,7 +121,7 @@
         <div class="table-wrap"><table><thead><tr><th>Customer</th><th>Promised amount</th><th>Due date</th><th>Status</th><th>Days overdue</th><th></th></tr></thead><tbody id="promisesBody"><tr><td colspan="6" class="empty-cell">Load fictional examples or create promises through the API.</td></tr></tbody></table></div>
       </section>
 
-      <footer><span>ReviveRoute · Razorpay AI Buildathon · API v1.1.0</span><span>Evidence boundary: merchant inputs, fictional labels, synthetic data and signed simulation—not production uplift.</span></footer>
+      <footer><span>ReviveRoute · Razorpay AI Buildathon · API v1.2.0</span><span>Evidence boundary: merchant inputs, fictional labels, synthetic data and signed simulation—not production uplift.</span></footer>
     </main>
   </div>
 
@@ -136,6 +136,6 @@
     </section>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/static/dashboard.js" defer></script>
+  <script src="/static/dashboard.js?v=1.2.0" defer></script>
 </body>
 </html>
