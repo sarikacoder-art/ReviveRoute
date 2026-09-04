@@ -184,6 +184,18 @@ A separate rules-based promise-to-pay watchlist shows active, due, kept, late-pa
 
 An empty deployed database is now populated automatically with 40 synthetic failed payments, a varied portfolio of signed simulated recoveries, and six fictional payment promises before the autonomous worker starts. Recovered examples span multiple failure reasons and the `LINK_NOW`, `LINK_AFTER_2H`, and `LINK_NEXT_MORNING` options. Seeding is idempotent, independently checks both datasets and can be disabled with `REVIVEROUTE_AUTO_SEED=false`. This prevents an empty judge dashboard after Render resets its temporary filesystem. See `docs/public_demo_seed.md`.
 
+## Milestone 12 — evidence-first judge readiness
+
+- The seed uses Indian business-hour timestamps so the real decision engine can demonstrate `LINK_NOW`, `LINK_AFTER_2H` and `LINK_NEXT_MORNING` instead of collapsing to one quiet-hour-safe option.
+- **Prove autonomous execution** creates a fictional due case and waits for the background worker—not the button handler—to execute it.
+- Agent status now distinguishes process-local activity from persisted execution evidence that survives a restart.
+- Observed recovery includes an executed-case denominator, recovery rate and a failure-reason/action/amount breakdown.
+- A credential-gated `RazorpayTestClient` accepts only `rzp_test_` keys, disables customer notifications and remains inactive unless explicitly configured.
+- Public copy now states that merchant authentication, rate limiting and tenant isolation are required before production use. The demo does not claim those controls already exist.
+- Executor errors are contained and surfaced in agent status instead of terminating the polling loop.
+
+Current verification: **103 passing tests**. See `docs/judge_readiness.md`.
+
 ## Deployment boundary
 
 Real Razorpay test-mode Payment Link creation remains behind an explicit configuration switch. The public demo never contacts a customer or payment API.

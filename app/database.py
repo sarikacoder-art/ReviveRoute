@@ -290,8 +290,25 @@ class RecoveryRepository:
             observed = connection.execute(
                 "SELECT COUNT(*) AS count, COALESCE(SUM(recovered_amount_inr), 0) AS amount FROM recovery_outcomes"
             ).fetchone()
+            executions = connection.execute("SELECT COUNT(*) AS count FROM executions").fetchone()
+            recovered_rows = connection.execute(
+                """SELECT c.request_json, c.selected_action, o.recovered_amount_inr
+                   FROM recovery_outcomes o JOIN recovery_cases c ON c.event_id = o.event_id"""
+            ).fetchall()
         amount = float(totals["amount_at_risk"])
         expected = float(totals["expected_net_recovery"])
+        breakdown: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in recovered_rows:
+            reason = json.loads(row["request_json"])["failure_reason"]
+            key = (reason, row["selected_action"])
+            bucket = breakdown.setdefault(key, {"failure_reason": reason, "recovery_action": row["selected_action"], "recovered_cases": 0, "recovered_amount_inr": 0.0})
+            bucket["recovered_cases"] += 1
+            bucket["recovered_amount_inr"] += float(row["recovered_amount_inr"])
+        breakdown_rows = sorted(breakdown.values(), key=lambda item: (-item["recovered_amount_inr"], item["failure_reason"]))
+        for item in breakdown_rows:
+            item["recovered_amount_inr"] = round(item["recovered_amount_inr"], 2)
+        execution_count = int(executions["count"])
+        recovered_count = int(observed["count"])
         return {
             "evidence_label": "model-based expectations; not observed or causal revenue",
             "case_count": int(totals["cases"]),
@@ -302,10 +319,31 @@ class RecoveryRepository:
             "action_distribution": {row["selected_action"]: row["count"] for row in actions},
             "observed_test_recovery": {
                 "evidence_label": "signed simulated/test webhook outcomes; not production revenue",
-                "recovered_case_count": int(observed["count"]),
+                "recovered_case_count": recovered_count,
                 "recovered_amount_inr": round(float(observed["amount"]), 2),
+                "executed_case_count": execution_count,
+                "observed_recovery_rate": round(recovered_count / execution_count, 4) if execution_count else 0.0,
+                "breakdown": breakdown_rows,
             },
         }
+
+    def execution_summary(self) -> dict[str, Any]:
+        with self.connect() as connection:
+            total = connection.execute("SELECT COUNT(*) AS count FROM executions").fetchone()["count"]
+            by_mode = connection.execute("SELECT execution_mode, COUNT(*) AS count FROM executions GROUP BY execution_mode").fetchall()
+            failed = connection.execute("SELECT COUNT(*) AS count FROM workflow_events WHERE event_type = 'EXECUTION_FAILED'").fetchone()["count"]
+        return {"persisted_executions": int(total), "failed_executions": int(failed), "mode_distribution": {row["execution_mode"]: row["count"] for row in by_mode}}
+
+    def make_case_due_for_demo(self, event_id: str) -> None:
+        """Move only a synthetic autonomous-proof case into the due queue."""
+        if not event_id.startswith("agent_proof_"):
+            raise ValueError("only autonomous-proof demo cases may be accelerated")
+        with self.connect() as connection:
+            row = connection.execute("SELECT workflow_status FROM recovery_cases WHERE event_id = ?", (event_id,)).fetchone()
+            if not row or row["workflow_status"] != "SCHEDULED":
+                raise InvalidTransitionError("autonomous proof case is not scheduled")
+            connection.execute("UPDATE recovery_cases SET execute_after_utc = ? WHERE event_id = ?", ((datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(), event_id))
+            connection.commit()
 
     def create_promise(self, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         now = datetime.now(timezone.utc).isoformat()

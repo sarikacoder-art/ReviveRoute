@@ -1,5 +1,6 @@
 """Autonomous bounded worker and promise-watchlist tests."""
 
+import asyncio
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,31 @@ def test_agent_can_be_disabled_for_controlled_deployments(tmp_path):
     with TestClient(create_app(tmp_path / "disabled.db", agent_enabled=False)) as api:
         status = api.get("/api/v1/agent/status").json()
         assert status["running"] is False and status["cycles_completed"] == 0
+        assert api.post("/api/v1/demo/autonomous-run").status_code == 409
+
+
+def test_agent_records_executor_error_without_crashing(tmp_path, monkeypatch):
+    application = create_app(tmp_path / "failure.db", agent_enabled=False)
+    with TestClient(application):
+        def fail_safely(*_args, **_kwargs):
+            raise TimeoutError("fictional provider timeout")
+
+        monkeypatch.setattr(application.state.executor, "run_due", fail_safely)
+        assert asyncio.run(application.state.agent_worker.run_once()) == []
+        status = application.state.agent_worker.status()
+        assert status["cycles_completed"] == 1
+        assert status["last_error"] == "TimeoutError: fictional provider timeout"
+
+
+def test_autonomous_proof_is_executed_by_background_worker(tmp_path):
+    with TestClient(create_app(tmp_path / "proof.db", agent_enabled=True, agent_interval_seconds=0.05)) as api:
+        result = api.post("/api/v1/demo/autonomous-run").json()
+        assert result["proof"] == "AUTONOMOUS_WORKER_EXECUTION"
+        assert result["button_executed_action"] is False
+        assert result["case"]["workflow_status"] == "ACTION_SENT"
+        assert result["agent"]["actions_executed"] >= 1
+        assert result["agent"]["persisted_executions"] >= 1
+        assert result["audit"]["valid"] is True
 
 
 def test_promise_statuses_summary_and_mark_paid(tmp_path):
@@ -87,7 +113,7 @@ def test_promise_validation_rejects_bad_dates_and_real_name_claims_are_absent(tm
     with TestClient(create_app(tmp_path / "validation.db", agent_enabled=False)) as api:
         assert api.post("/api/v1/promises", json=payload).status_code == 422
         assert api.post("/api/v1/promises/missing/mark-paid").status_code == 404
-        assert api.get("/health").json()["version"] == "1.0.0"
+        assert api.get("/health").json()["version"] == "1.1.0"
 
 
 def test_dashboard_makes_autonomy_and_fictional_promise_boundary_visible(tmp_path):

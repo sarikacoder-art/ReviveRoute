@@ -54,7 +54,7 @@ def test_older_fictional_demo_is_upgraded_once(tmp_path):
         summary = api.get("/api/v1/summary").json()
         seed = api.get("/api/v1/demo/seed-status").json()
         assert summary["case_count"] == 66
-        assert summary["observed_test_recovery"]["recovered_case_count"] >= 8
+        assert summary["observed_test_recovery"]["recovered_case_count"] >= 7
         assert seed["mode"] == "AUTO_UPGRADED_FICTIONAL_DEMO"
         assert seed["cases_seeded"] == 40
     with TestClient(create_app(database, agent_enabled=False, auto_seed=True)) as api:

@@ -53,12 +53,14 @@ class RecoveryAgentWorker:
             await asyncio.sleep(self.interval_seconds)
 
     def status(self) -> dict:
+        persisted = self.executor.repository.execution_summary()
         return {
             "agent_mode": "AUTONOMOUS_SIMULATED",
             "running": self.running,
             "poll_interval_seconds": self.interval_seconds,
             "cycles_completed": self.cycles,
             "actions_executed": self.executions,
+            **persisted,
             "last_run_utc": self.last_run_utc,
             "last_error": self.last_error,
             "customer_contacted": False,

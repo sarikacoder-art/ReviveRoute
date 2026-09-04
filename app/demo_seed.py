@@ -6,6 +6,7 @@ import json
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from app.database import RecoveryRepository
 from app.decision_engine import DecisionEngine, RecoveryCase
@@ -102,15 +103,22 @@ def seed_empty_demo(repository: RecoveryRepository, engine: DecisionEngine, exec
     promises_seeded = 0
     summary_before = repository.summary()
     existing_cases = repository.list_cases(limit=200)
+    recovered_actions = {item["recovery_action"] for item in summary_before["observed_test_recovery"].get("breakdown", [])}
+    needs_varied_showcase = not {"LINK_NOW", "LINK_AFTER_2H", "LINK_NEXT_MORNING"}.issubset(recovered_actions)
     is_empty = summary_before["case_count"] == 0
     is_older_fictional_demo = (
         0 < summary_before["case_count"] <= 30
         and summary_before["observed_test_recovery"]["recovered_case_count"] <= 1
         and all(item["event_id"].startswith(("sample_", "demo_failed_")) for item in existing_cases)
     )
-    if is_empty or is_older_fictional_demo:
+    if is_empty or is_older_fictional_demo or needs_varied_showcase:
         candidates = []
-        for payload in sample_batch(40):
+        local_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        business_time = local_now.replace(hour=10, minute=0, second=0, microsecond=0)
+        if business_time > local_now:
+            business_time -= timedelta(days=1)
+        for index, original in enumerate(sample_batch(40)):
+            payload = original.model_copy(update={"timestamp_utc": (business_time + timedelta(minutes=index)).astimezone(timezone.utc)})
             request = payload.model_dump(mode="json")
             case = RecoveryCase(**payload.model_dump(), case_created_at_utc=payload.timestamp_utc)
             decision = engine.decide(case)
@@ -126,7 +134,7 @@ def seed_empty_demo(repository: RecoveryRepository, engine: DecisionEngine, exec
     if repository.promise_summary()["promise_count"] == 0:
         promises_seeded = seed_sample_promises(repository)
     return {
-        "mode": "AUTO_UPGRADED_FICTIONAL_DEMO" if is_older_fictional_demo else "AUTO_SEEDED_FICTIONAL_DEMO",
+        "mode": "AUTO_UPGRADED_FICTIONAL_DEMO" if (is_older_fictional_demo or (needs_varied_showcase and not is_empty)) else "AUTO_SEEDED_FICTIONAL_DEMO",
         "cases_seeded": cases_seeded,
         "signed_recoveries_seeded": signed_recoveries_seeded,
         "recovery_examples": recovered_portfolio,

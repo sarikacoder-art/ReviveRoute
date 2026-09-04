@@ -50,7 +50,7 @@ The demonstration contacts no customer and calls no payment API.
 
 ## Validation
 
-- 98 automated tests cover data, model, policy, persistence, webhooks, attribution, autonomous execution, idempotent public-demo seeding and upgrade, promise tracking, merchant intake, dashboard and audit integrity.
+- 103 automated tests cover data, model, policy, persistence, webhooks, attribution, autonomous execution and failure containment, idempotent public-demo seeding and upgrade, the credential-gated Razorpay test adapter, promise tracking, merchant intake, dashboard and audit integrity.
 - Invalid signatures fail closed.
 - Exact webhook retries are idempotent; conflicting replays are rejected.
 - Paid outcomes require an existing recovery reference and matching full amount.

@@ -20,7 +20,7 @@ def test_dashboard_and_local_assets_are_served(tmp_path):
         assert api.get("/static/dashboard.css").status_code == 200
         assert api.get("/static/dashboard.js").status_code == 200
         assert api.get("/static/favicon.svg").status_code == 200
-        assert api.get("/health").json()["version"] == "1.0.0"
+        assert api.get("/health").json()["version"] == "1.1.0"
 
 
 def test_one_click_demo_closes_the_loop_without_external_calls(tmp_path):
@@ -83,9 +83,11 @@ def test_repeated_demo_runs_are_unique_and_accumulate_observed_results(tmp_path)
         assert first["case"]["event_id"] != second["case"]["event_id"]
         summary = api.get("/api/v1/summary").json()
         assert summary["case_count"] == 2
-        assert summary["observed_test_recovery"] == {
-            "evidence_label": "signed simulated/test webhook outcomes; not production revenue",
-            "recovered_case_count": 2,
-            "recovered_amount_inr": 3600.0,
-        }
+        observed = summary["observed_test_recovery"]
+        assert observed["evidence_label"] == "signed simulated/test webhook outcomes; not production revenue"
+        assert observed["recovered_case_count"] == 2
+        assert observed["recovered_amount_inr"] == 3600.0
+        assert observed["executed_case_count"] == 2
+        assert observed["observed_recovery_rate"] == 1.0
+        assert observed["breakdown"]
         assert api.get("/api/v1/audit/verify").json()["valid"] is True

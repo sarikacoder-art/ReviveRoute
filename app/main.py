@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -18,6 +20,7 @@ from app.demo import DemoFlow
 from app.demo_seed import seed_empty_demo, seed_sample_promises
 from app.executor import SimulatedExecutor
 from app.intake import IntakeError, csv_template, parse_csv_batch, sample_batch
+from app.razorpay_test import RazorpayTestClient
 from app.schemas import FailedPaymentRequest, PromiseToPayRequest, TransitionRequest
 from app.webhooks import WebhookPayloadError, failed_payment_to_case, parse_webhook, payment_entity, payment_link_outcome, verify_webhook_signature
 
@@ -45,7 +48,7 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
 
     application = FastAPI(
         title="ReviveRoute API",
-        version="1.0.0",
+        version="1.1.0",
         description="Bounded failed-payment recovery workflow prototype",
         lifespan=lifespan,
     )
@@ -159,9 +162,53 @@ def create_app(database_path: str | Path = DEFAULT_DATABASE_PATH, engine: Decisi
     def agent_status():
         return worker.status()
 
+    @application.post("/api/v1/demo/autonomous-run")
+    async def run_autonomous_agent_proof():
+        if not worker.running:
+            raise HTTPException(status_code=409, detail="autonomous worker is disabled")
+        local_time = datetime.now(ZoneInfo("Asia/Kolkata")).replace(hour=10, minute=0, second=0, microsecond=0)
+        if local_time > datetime.now(ZoneInfo("Asia/Kolkata")):
+            local_time -= timedelta(days=1)
+        selected_payload = None
+        selected_decision = None
+        for candidate in sample_batch(20):
+            payload = candidate.model_copy(update={
+                "event_id": f"agent_proof_{candidate.event_id}",
+                "customer_id": "fictional_autonomous_proof",
+                "timestamp_utc": local_time.astimezone(timezone.utc),
+            })
+            case = RecoveryCase(**payload.model_dump(), case_created_at_utc=payload.timestamp_utc)
+            decision = get_engine().decide(case)
+            if decision.workflow_status == "SCHEDULED":
+                selected_payload, selected_decision = payload, decision
+                break
+        if selected_payload is None or selected_decision is None:
+            raise HTTPException(status_code=500, detail="no safe schedulable proof case was found")
+        stored, _ = repository.create_case(selected_payload.model_dump(mode="json"), selected_decision)
+        repository.make_case_due_for_demo(selected_payload.event_id)
+        deadline = asyncio.get_running_loop().time() + max(5.0, worker.interval_seconds * 2.5)
+        while asyncio.get_running_loop().time() < deadline:
+            current = repository.get_case(selected_payload.event_id)
+            if current["workflow_status"] == "ACTION_SENT":
+                return {
+                    "proof": "AUTONOMOUS_WORKER_EXECUTION",
+                    "button_executed_action": False,
+                    "customer_contacted": False,
+                    "payment_api_called": False,
+                    "case": current,
+                    "agent": worker.status(),
+                    "audit": repository.verify_audit_chain(),
+                }
+            await asyncio.sleep(min(0.25, worker.interval_seconds))
+        raise HTTPException(status_code=504, detail="worker did not execute the proof case before timeout")
+
     @application.get("/api/v1/demo/seed-status")
     def demo_seed_status():
         return application.state.seed_status
+
+    @application.get("/api/v1/integrations/razorpay-test/status")
+    def razorpay_test_status():
+        return RazorpayTestClient.status()
 
     @application.post("/api/v1/promises", status_code=status.HTTP_201_CREATED)
     def create_payment_promise(payload: PromiseToPayRequest):
